@@ -13,7 +13,8 @@ readeche <- function(path) {
     # assign filename-parsed metadata to data table
     dt[, `:=`(sample_no=as.integer(str_match(f, '^Sample([0-9]+)_')[,2]),
               technique=str_match(f, '_([A-Z]+)[0-9]+\\.txt')[,2],
-              technum=as.integer(str_match(f, '_[A-Z]+([0-9]+)\\.txt')[,2])
+              technum=as.integer(str_match(f, '_[A-Z]+([0-9]+)\\.txt')[,2]),
+              run=basename(sub(f, '', path))
               )]
     return(dt)
 }
@@ -23,23 +24,37 @@ readopt <- function(path) {
     f <- basename(path)
     # use R-friendly names
     names(dt) <- sub('\\)', '', names(dt))
-    names(dt) <- sub('\\(', '.', names(dt))
+    names(dt) <- sub('\\(', '_', names(dt))
     # assign filename-parsed metadata to data table
     dt[, `:=`(sample_no=as.integer(str_match(f, '^Sample([0-9]+)_')[,2]),
-              technique=str_match(f, '_([A-Z]+)[0-9]+_TRANS')[,2],
-              technum=as.integer(str_match(f, '_[A-Z]+([0-9]+)_TRANS')[,2]),
-              trans=as.integer(str_match(f, '_TRANS([0-9]+)_')[,2]),
-              time=as.character(strptime(str_match(f, '_([0-9]{8}\\.[0-9]{6})\\.[0-9]\\.opt')[,2], format='%Y%m%d.%H%M%S'))
+              technique=str_match(f, '_([A-Z]+)[0-9]+_(TRANS|DARK)')[,2],
+              technum=as.integer(str_match(f, '_[A-Z]+([0-9]+)_(TRANS|DARK)')[,2]),
+              trans=as.integer(str_match(f, '_(TRANS|DARK)([0-9]+)_')[,3]),
+              time=as.character(strptime(str_match(f, '_([0-9]{8}\\.[0-9]{6})\\.[0-9]\\.opt')[,2], format='%Y%m%d.%H%M%S')),
+              run=basename(sub(f, '', path))
               )]
     return(dt)
 }
 
 readechefiles <- function(l) {
-    return(rbindlist(mclapply(l, readeche, mc.cores=8)))
+    return(rbindlist(lapply(l, readeche)))
+}
+
+library(doParallel)
+readechefiles2 <- function(l) {
+  return(rbindlist(foreach(i=1:length(l), .export=c('readeche', 'fread', 'str_match')) %dopar% readeche(l[i])))
+}
+
+readechedir <- function(dir) {
+  return(readechefiles(list.files(dir, pattern='.txt', full.names=T)))
 }
 
 readoptfiles <- function(l) {
-    return(rbindlist(mclapply(l, readopt, mc.cores=8)))
+    return(rbindlist(lapply(l, readopt)))
+}
+
+readoptdir <- function(dir) {
+  return(readoptfiles(list.files(dir, pattern='.opt', full.names=T)))
 }
 
 readxrf <- function(f) {
@@ -83,6 +98,23 @@ readpm <- function(f) {
     setnames(pmdt, sub('\\(.*\\)', '', names(pmdt)))
     setkey(pmdt, 'Sample')
     return(pmdt)
+}
+
+getpm <- function(pmnum) {
+    pmfiles <- list.files(file.path(jd, 'map'), full=T, pattern=paste0('^0*', pmnum, '-'))
+    pmtxts <- grep('\\.txt', pmfiles, value=T)
+    matches <- length(pmtxts)
+    if(matches == 0) {
+        print(paste('Platemap', pmnum, 'not found.'))
+        return(NA)
+    }
+    if(matches > 1) {
+        print(paste('Found', matches, 'ascii files for platemap', pmnum))
+        print('Returning first match.')
+    }
+    else {
+        return(readpm(pmtxts[1]))
+    }
 }
 
 findnn <- function(pm, targetcode, nnd, channel='A', spancodes=F, sym=T) {
@@ -221,7 +253,7 @@ readrcp <- function(rcp) {
 
     getKeyDepth = function(key) {
         counter <- 0
-        while(grepl(paste0(rep('    ', counter + 1), collapse = ''), key)==TRUE) {
+        while(grepl(paste0('^', rep('    ', counter + 1), collapse = ''), key)==TRUE) {
             counter <- counter + 1
         }
         return(counter)
@@ -299,9 +331,10 @@ readrcp <- function(rcp) {
 
 # Takes a single .rcp file path and returns a list with nested lists for params,
 # and filenames.
-readzip <- function(archive) {
+readzip <- function(archive, ext='.rcp') {
+    print(archive)
     fn<-strsplit(archive, '.', fixed=T)[[1]]
-    rcpfile<-paste0(fn[1], '.', fn[2], '.rcp')
+    rcpfile<-paste0(tail(strsplit(fn[1], '/')[[1]], n=1), '.', fn[2], ext)
     filecon<-unz(archive, filename=rcpfile)
     filezcon<-gzcon(filecon)
     stxt <- readLines(filezcon)
@@ -310,7 +343,7 @@ readzip <- function(archive) {
 
     getKeyDepth = function(key) {
         counter <- 0
-        while(grepl(paste0(rep('    ', counter + 1), collapse = ''), key)==TRUE) {
+        while(grepl(paste0('^', rep('    ', counter + 1), collapse = ''), key)==TRUE) {
             counter <- counter + 1
         }
         return(counter)
