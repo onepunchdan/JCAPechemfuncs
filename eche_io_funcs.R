@@ -237,23 +237,34 @@ readana<-function(anapath){
 
 # Takes a single .rcp file path and returns a list with nested lists for params,
 # and filenames.
-readrcp <- function(rcp) {
-    frl = function(fname) { # faster readlines
-        s = file.info( fname )$size
-        buf = readChar( fname, s, useBytes=T)
-        strsplit( buf,"\n",fixed=T,useBytes=T)[[1]]
+readnest <- function(fpath, ext, unzip=F) {
+    if(unzip) {
+        fn<-strsplit(fpath, '.', fixed=T)[[1]]
+        rcpfile<-paste0(tail(strsplit(fn[1], '/')[[1]], n=1), '.', fn[2], ext)
+        filecon<-unz(fpath, filename=rcpfile)
+        filezcon<-gzcon(filecon)
+        stxt <- readLines(filezcon)
+        close(filezcon)
     }
-    stxt <- frl(rcp)
-
+    else {
+        frl = function(fname) { # faster readlines
+            s = file.info( fname )$size
+            buf = readChar( fname, s, useBytes=T)
+            strsplit( buf,"\n",fixed=T,useBytes=T)[[1]]
+        }
+        stxt <- frl(fpath)
+    }
     # returns string w/o leading whitespace
     trim.leading <- function (x)  sub("^\\s+", "", x)
 
     # returns string w/o trailing whitespace
     trim.trailing <- function (x) sub("\\s+$", "", x)
 
-    getKeyDepth = function(key) {
+    getKeyDepth = function(txtline) {
+        key <- strsplit(txtline, ':')[[1]][1]
+        print(key)
         counter <- 0
-        while(grepl(paste0('^', rep('    ', counter + 1), collapse = ''), key)==TRUE) {
+        while(grepl(paste0(rep('    ', counter + 1), collapse = ''), key)==TRUE) {
             counter <- counter + 1
         }
         return(counter)
@@ -323,102 +334,19 @@ readrcp <- function(rcp) {
     }
 
     keydepths <- as.numeric(sapply(stxt, getKeyDepth))
+    print(keydepths)
     rootdepth <- 0
     rootinds <- which(keydepths==rootdepth)
     return(buildnest(rootinds, rootdepth))
 }
 
-
-# Takes a single .rcp file path and returns a list with nested lists for params,
-# and filenames.
-readzip <- function(archive, ext='.rcp') {
-    print(archive)
-    fn<-strsplit(archive, '.', fixed=T)[[1]]
-    rcpfile<-paste0(tail(strsplit(fn[1], '/')[[1]], n=1), '.', fn[2], ext)
-    filecon<-unz(archive, filename=rcpfile)
-    filezcon<-gzcon(filecon)
-    stxt <- readLines(filezcon)
-    close(filezcon)
-    # close(filecon)
-
-    getKeyDepth = function(key) {
-        counter <- 0
-        while(grepl(paste0('^', rep('    ', counter + 1), collapse = ''), key)==TRUE) {
-            counter <- counter + 1
-        }
-        return(counter)
+readrcp <- function(fpath) {
+    if(grepl('\\.zip', fpath)) {
+        return(readnest(fpath, ext='.rcp', unzip=T))
     }
-
-    # returns string w/o leading whitespace
-    trim.leading <- function (x)  sub("^\\s+", "", x)
-
-    # returns string w/o trailing whitespace
-    trim.trailing <- function (x) sub("\\s+$", "", x)
-
-    getKV <- function(txtline) {
-        v <- sub("^[^:]+:\\s*", "", txtline)
-        if(nchar(v)==0){
-            k <- trim.leading(sub(':', '', txtline))
-            return(k)
-        }
-        else{
-            k <- sub(v, "", txtline, fixed=T)
-            k <- trim.leading(trim.trailing(sub(':', '', k)))
-            el <- list()
-            el[[k]] <- v
-            return(el)
-        }
+    else{
+        return(readnest(fpath))
     }
-
-    consecinds <- function (x) {
-        if(length(x) == 0) {
-            return(x)
-        }
-        else {
-            cinds <- x[1]
-            for(i in 2:length(x)) {
-                if(x[i] == 1 + x[i-1]) {
-                    cinds <- c(cinds, x[i])
-                }
-                else {
-                    break
-                }
-            }
-            return(cinds)
-        }
-    }
-
-    buildnest <- function(inds, depth) {
-        templist <- list()
-        for(i in inds) {
-            cval <- getKV(stxt[i])
-            if(i == length(stxt)) {
-                templist <- c(templist, cval)
-            }
-            else {
-                if(keydepths[i] < keydepths[i + 1]) {
-                    subinds <- which(keydepths == (depth + 1))
-                    subinds <- subinds[subinds > i]
-                    cdepths <- which(keydepths <= depth)
-                    if(any(cdepths > i)) {
-                        nextind <- min(cdepths[cdepths > i])
-                        subinds <- subinds[subinds < nextind]
-                    }
-                    sublist<-buildnest(subinds, depth + 1)
-                    templist[[cval]] <- sublist
-                }
-                else {
-                    templist <- c(templist, cval)
-                }
-            }
-        }
-        return(templist)
-    }
-
-    keydepths <- as.numeric(sapply(stxt, getKeyDepth))
-    rootdepth <- 0
-    rootinds <- which(keydepths==rootdepth)
-    return(buildnest(rootinds, rootdepth))
 }
 
 readfom <- function(fompath, fn=F) {
@@ -432,6 +360,19 @@ readfom <- function(fompath, fn=F) {
     }
     return(fomdt)
 }
+
+
+getinfo <- function(plateno) {
+    infopath <- file.path(jd, 'plate', plateno, paste0(plateno, '.info'))
+    if(file.exists(infopath)) {
+        return(readnest(infopath))
+    }
+    else {
+        print(paste(infopath, 'not found.'))
+        return(NA)
+    }
+}
+
 
 # TESTING
 
