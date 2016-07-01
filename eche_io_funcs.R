@@ -1,7 +1,6 @@
 library(data.table)
 library(stringr)
-library(readr)
-library(parallel)
+library(doParallel)
 
 readeche <- function(path) {
     dt <- fread(path)
@@ -18,6 +17,16 @@ readeche <- function(path) {
               )]
     return(dt)
 }
+
+scrubnames <- function(DT) {
+    colnames <- names(DT)
+    colnames <- sub('\\)', '', colnames)
+    colnames <- sub('\\(', '.', colnames)
+    colnames <- sub('%column_headings=', '', colnames)
+    setnames(DT, colnames)
+}
+
+
 
 readopt <- function(path) {
     dt <- fread(path)
@@ -40,7 +49,6 @@ readechefiles <- function(l) {
     return(rbindlist(lapply(l, readeche)))
 }
 
-library(doParallel)
 readechefiles2 <- function(l) {
   return(rbindlist(foreach(i=1:length(l), .export=c('readeche', 'fread', 'str_match')) %dopar% readeche(l[i])))
 }
@@ -208,18 +216,13 @@ readana<-function(anapath){
         strsplit( buf,"\n",fixed=T,useBytes=T)[[1]]
     }
     stxt <- frl(anapath)
-    # analist<-readRCP(anapath)
 
     dflist<-list()
     anapathsplit<-unlist(strsplit(anapath, '/'))
     anafile<-anapathsplit[length(anapathsplit)]
     anafolder<-sub(anafile, '', anapath)
-    # anas<-grep('ana__', names(analist), value=T)
-    # for(i in anas){
-    # fomfiles<-names(analist[[i]][['files_multi_run']][['fom_files']])
     csvlines <- unique(grep('.csv', stxt, fixed=T, value=T))
     fomfiles <- sapply(csvlines, function(x) trim(strsplit(x, ':', fixed=T)[[1]][1]))
-    # print(as.character(fomfiles))
     for(f in fomfiles){
         ananame<-paste0('ana', '__', strsplit(f, '__')[[1]][2])
         fompath<-paste0(anafolder, f)
@@ -227,8 +230,6 @@ readana<-function(anapath){
         fomhead<-as.numeric(unlist(strsplit(readLines(fomcon, n=1), '\t')))
         close(fomcon)
         fomtbl<-read.table(fompath, header=T, sep=',', na.strings='NaN', skip=fomhead[4]+1, nrows=fomhead[3]+1)
-        # names(fomtbl)<-paste0('ana', strsplit(f, '__')[[1]][2], '_', names(fomtbl))
-        # names(fomtbl)<-paste0(sub('__', '', i), '_', names(fomtbl))
         dflist[[ananame]]<-I(as.data.frame(fomtbl))
     }
     # }
@@ -262,7 +263,6 @@ readnest <- function(fpath, ext, unzip=F) {
 
     getKeyDepth = function(txtline) {
         key <- strsplit(txtline, ':')[[1]][1]
-        print(key)
         counter <- 0
         while(grepl(paste0(rep('    ', counter + 1), collapse = ''), key)==TRUE) {
             counter <- counter + 1
@@ -334,7 +334,6 @@ readnest <- function(fpath, ext, unzip=F) {
     }
 
     keydepths <- as.numeric(sapply(stxt, getKeyDepth))
-    print(keydepths)
     rootdepth <- 0
     rootinds <- which(keydepths==rootdepth)
     return(buildnest(rootinds, rootdepth))
@@ -373,27 +372,7 @@ getinfo <- function(plateno) {
     }
 }
 
-
-# TESTING
-
-# ladt<-fread('/home/dan/htehome/users/hte/catalysts on BVO/La/NiLaCoCe_29922_LampTrans_fixedcal_fixedspecinds_withTRANS64_AveAM15.csv')
-# ladt<-ladt[,1:9, with=F]
-#
-#
-# smoothladt<-smoothfom(ladt, testnnsym, 2)
-# smoothladt
-#
-# system.time(testnnsym<-findnn('~/pms/0049-04-0830-mp.txt', targetcode=30, 1, spancodes=F))
-# system.time(testnn<-findnn('~/pms/0049-04-0830-mp.txt', targetcode=30, 1, spancodes=F, sym=F))
-# list.files('~/pms/')
-#
-# testnn[A==0 & B==0 & C==0]
-# testnn[Sample %in% c(726, 730, 733,1000)]
-# testnnsym[A==0 & B==0 & C==0]
-# testnnsym[Sample %in% c(726, 730, 1000)]
-#
-# subpm[, .(A, B, C, D, list(which(if(A==min(subpm[,A])) subpm[,A]==min(subpm[,A]) else rep(T, nrow(subpm)) &
-#                                      if(B==min(subpm[,B])) subpm[,B]==min(subpm[,B]) else rep(T, nrow(subpm)) &
-#                                      if(C==min(subpm[,C])) subpm[,C]==min(subpm[,C]) else rep(T, nrow(subpm)) &
-#                                      if(D==min(subpm[,D])) subpm[,D]==min(subpm[,D]) else rep(T, nrow(subpm))
-#                                      ))), by = Sample]
+### RCP list functions to write
+# (1) get techniques
+# (2) get technique params
+# (3) get list of files/samples
