@@ -65,6 +65,10 @@ readoptdir <- function(dir) {
   return(readoptfiles(list.files(dir, pattern='.opt', full.names=T)))
 }
 
+readexpfiles <- function(exp) {
+    
+}
+
 readxrf <- function(f) {
     orbcsv<-fread(f, skip=6, drop=c('StagR', 'MatchName', 'MatchSig', 'CoatThk1', 'CoatThk2','CoatConc'))
 
@@ -205,6 +209,54 @@ writefom <- function(df) {
 }
 
 
+getexpfiles <- function(ep, type='pstat_files') {
+    exp <- readrcp(ep)
+    runs <- grep('run__', names(exp), value=T)
+    getfilelist <- function(run) {
+        ftechs <- grep('files_technique__', names(exp[[run]]), value=T)
+        makefiledt <- function(ft) {
+            matlist <- lapply(exp[[run]][[ft]][[type]], 
+                              function(x) matrix(unlist(strsplit(x, ';')), ncol=5))
+            newdt <- as.data.table(do.call(rbind, matlist))
+            setnames(newdt, c('type', 'colnames', 'skip', 'nrows', 'Sample'))
+            newdt[,filename:=names(matlist)]
+            newdt[,skip:=as.integer(skip)]
+            newdt[,nrows:=as.integer(nrows)]
+            newdt[,Sample:=as.numeric(Sample)]
+            techstr <- unlist(strsplit(ft, '__'))[2]
+            newdt[,tech:=sub('[0-9]+', '', techstr)]
+            newdt[,technum:=as.numeric(sub('[A-Za-z]+', '', techstr))]
+            return(newdt)
+        }
+        rbindlist(lapply(ftechs, makefiledt))
+    }
+    finaldt<-rbindlist(lapply(runs, function(x) getfilelist(x)[,run_path:=file.path(jd, 'run', sub('^/', '', exp[[x]][['run_path']]))]))
+    return(finaldt[order(technum, Sample)])
+}
+
+readexpfiles <- function(expdt) {
+    runs <- unique(expdt$run_path)
+    readzipped <- function(run) {
+        rundt <- expdt[run_path==run]
+        unzip(run, files=rundt$filename, exdir=unztemp, overwrite=T, junkpaths=T)
+        newdt<-rbindlist(apply(rundt, 1, function(x) fread(file.path(unztemp, x['filename']), 
+                                                           # skip=x['skip'], 
+                                                           # nrows=x['nrows'],
+                                                           col.names=unlist(strsplit(x['colnames'], ',')[[1]]))[, `:=`(Sample=x['Sample'],
+                                                                                                                       technum=x['technum'],
+                                                                                                                       tech=x['tech'],
+                                                                                                                       filename=x['filename'],
+                                                                                                                       type=x['type'])]))
+        names(newdt) <- sub('\\)', '', names(newdt))
+        names(newdt) <- sub('\\(', '.', names(newdt))
+        return(newdt)
+    }
+    finaldt<-rbindlist(lapply(runs, readzipped))
+    return(finaldt[order(technum, Sample, t.s)])
+}
+
+
+
 
 ## NON-DT functions
 ##
@@ -215,6 +267,7 @@ readana<-function(anapath){
         buf = readChar( fname, s, useBytes=T)
         strsplit( buf,"\n",fixed=T,useBytes=T)[[1]]
     }
+    trim <- function (x) gsub("^\\s+|\\s+$", "", x)
     stxt <- frl(anapath)
 
     dflist<-list()
@@ -341,11 +394,12 @@ readnest <- function(fpath, ext, unzip=F) {
 
 readrcp <- function(fpath) {
     if(grepl('\\.zip', fpath)) {
-        return(readnest(fpath, ext='.rcp', unzip=T))
+        rcplist<-readnest(fpath, ext='.rcp', unzip=T)
     }
     else{
-        return(readnest(fpath))
+        rcplist<-readnest(fpath)
     }
+    return(c(rcplist, rcppath=fpath))
 }
 
 readfom <- function(fompath, fn=F) {
@@ -372,7 +426,69 @@ getinfo <- function(plateno) {
     }
 }
 
+getruns <- function(plateno) {
+    infolist <- getinfo(plateno)
+    
+}
+
+library(doSNOW)
+cl<-makeCluster(4)
+registerDoSNOW(cl)
+system.time(for(i in names(getinfo(2154)$runs)) getinfo(2154)$runs[[i]]$path)
+system.time(lapply(names(getinfo(2154)$runs), function(i) getinfo(2154)$runs[[i]]$path))
+system.time(foreach(i=names(getinfo(2154)$runs)) %do% getinfo(2154)$runs[[i]]$path)
+system.time(foreach(i=names(getinfo(2154)$runs)) %dopar% getinfo(2154)$runs[[i]]$path)
+
 ### RCP list functions to write
 # (1) get techniques
+gettechs <- function(rcp) {
+    techs <- sub('echem_params__', '', grep('echem_params__(.*[0-9])', names(rcp), value=T))
+    return(techs)
+}
+
 # (2) get technique params
+getparams <- function(rcp, tech) {
+    param.ind <- grep(paste0('echem_params__', tech), names(rcp))
+    params <- rcp[[param.ind]]
+    return(params)
+}
+
 # (3) get list of files/samples
+getpstatfiles <- function(rcp, tech) {
+    file.ind <- grep(paste0('files_technique__', tech), names(rcp))
+    flist <- rcp[[file.ind]]$pstat_files
+    return(flist)
+}
+
+getspecfiles <- function(rcp, tech) {
+    file.ind <- grep(paste0('files_technique__', tech), names(rcp))
+    flist <- rcp[[file.ind]]$spectrum_files
+    return(flist)
+}
+
+
+library(foreach)
+library(doSNOW)
+
+readpstatfiles.rcp <- function(rcp, tech, samples=NULL) {
+    flist <- getpstatfiles(rcp, tech)
+    slist <- as.factor(str_match(flist, ';([0-9]*)$')[,2])
+    importsamples <- if(is.null(samples)) slist else samples
+    rcpfolder <- sub(basename(rcp$rcppath), '', rcp$rcppath)
+    DT.files <- data.table(Sample=slist, fn=names(flist), val=as.character(flist))
+    DT.new <- rbindlist(foreach(i=importsamples, .packages=c('data.table', 'stringr')) %dopar% {
+        fread(file.path(rcpfolder, DT.files[Sample==i, fn]),
+              col.names=sub('\\)', '',
+                            sub('\\(', '.',
+                                strsplit(strsplit(DT.files[Sample==i, val], ';')[[1]][2], ',')[[1]])))[,`:=`(Sample=i, Eta.V=Ewe.V-as.numeric(rcp$reference_e0))]
+    })
+    return(DT.new)
+}
+
+# testpstatDT<-readpstatfiles.rcp(testrcp, 'CA2')
+
+
+# cl<-makeCluster(8)
+# registerDoSNOW(cl)
+# foreach(i=unique(testpstatDT$Sample), .packages=c('foreach', 'data.table'), .combine='rbind') %dopar% data.table(Sample=i, Iphoto.A=calc.iphoto(index.toggle(testpstatDT[Sample==i & t.s>36], 'Ach.V', -1, T))[,mean(Iphoto.A)])
+# stopCluster(cl)
