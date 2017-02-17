@@ -1,8 +1,8 @@
 library(data.table)
 library(stringr)
-library(doParallel)
 
 readeche <- function(path) {
+
     dt <- fread(path)
     f <- basename(path)
     # use R-friendly names
@@ -10,11 +10,13 @@ readeche <- function(path) {
     names(dt) <- sub('\\)', '', names(dt))
     names(dt) <- sub('\\(', '.', names(dt))
     # assign filename-parsed metadata to data table
-    dt[, `:=`(sample_no=as.integer(str_match(f, '^Sample([0-9]+)_')[,2]),
-              technique=str_match(f, '_([A-Z]+)[0-9]+\\.txt')[,2],
-              technum=as.integer(str_match(f, '_[A-Z]+([0-9]+)\\.txt')[,2]),
-              run=basename(sub(f, '', path))
-              )]
+    suppressWarnings({
+        dt[, `:=`(sample_no=as.integer(str_match(f, '^Sample([0-9]+)_')[,2]),
+                  technique=str_match(f, '_([A-Z]+)[0-9]+\\.txt')[,2],
+                  technum=as.integer(str_match(f, '_[A-Z]+([0-9]+)\\.txt')[,2]),
+                  run=basename(sub(f, '', path))
+        )]
+    })
     return(dt)
 }
 
@@ -66,7 +68,7 @@ readoptdir <- function(dir) {
 }
 
 readexpfiles <- function(exp) {
-    
+
 }
 
 readxrf <- function(f) {
@@ -215,7 +217,7 @@ getexpfiles <- function(ep, type='pstat_files') {
     getfilelist <- function(run) {
         ftechs <- grep('files_technique__', names(exp[[run]]), value=T)
         makefiledt <- function(ft) {
-            matlist <- lapply(exp[[run]][[ft]][[type]], 
+            matlist <- lapply(exp[[run]][[ft]][[type]],
                               function(x) matrix(unlist(strsplit(x, ';')), ncol=5))
             newdt <- as.data.table(do.call(rbind, matlist))
             setnames(newdt, c('type', 'colnames', 'skip', 'nrows', 'Sample'))
@@ -239,14 +241,14 @@ readexpfiles <- function(expdt) {
     readzipped <- function(run) {
         rundt <- expdt[run_path==run]
         unzip(run, files=rundt$filename, exdir=unztemp, overwrite=T, junkpaths=T)
-        newdt<-rbindlist(apply(rundt, 1, function(x) fread(file.path(unztemp, x['filename']), 
-                                                           # skip=x['skip'], 
+        newdt<-rbindlist(apply(rundt, 1, function(x) fread(file.path(unztemp, x['filename']),
+                                                           # skip=x['skip'],
                                                            # nrows=x['nrows'],
-                                                           col.names=unlist(strsplit(x['colnames'], ',')[[1]]))[, `:=`(Sample=x['Sample'],
-                                                                                                                       technum=x['technum'],
-                                                                                                                       tech=x['tech'],
-                                                                                                                       filename=x['filename'],
-                                                                                                                       type=x['type'])]))
+                                                           col.names=unlist(strsplit(x['colnames'], ',')[[1]]))[, `:=`(Sample=as.numeric(trimws(x['Sample'])),
+                                                                                                                       technum=as.numeric(trimws(x['technum'])),
+                                                                                                                       tech=trimws(x['tech']),
+                                                                                                                       filename=trimws(x['filename']),
+                                                                                                                       type=trimws(x['type']))]))
         names(newdt) <- sub('\\)', '', names(newdt))
         names(newdt) <- sub('\\(', '.', names(newdt))
         return(newdt)
@@ -428,16 +430,16 @@ getinfo <- function(plateno) {
 
 getruns <- function(plateno) {
     infolist <- getinfo(plateno)
-    
+
 }
 
-library(doSNOW)
-cl<-makeCluster(4)
-registerDoSNOW(cl)
-system.time(for(i in names(getinfo(2154)$runs)) getinfo(2154)$runs[[i]]$path)
-system.time(lapply(names(getinfo(2154)$runs), function(i) getinfo(2154)$runs[[i]]$path))
-system.time(foreach(i=names(getinfo(2154)$runs)) %do% getinfo(2154)$runs[[i]]$path)
-system.time(foreach(i=names(getinfo(2154)$runs)) %dopar% getinfo(2154)$runs[[i]]$path)
+# library(doSNOW)
+# cl<-makeCluster(4)
+# registerDoSNOW(cl)
+# system.time(for(i in names(getinfo(2154)$runs)) getinfo(2154)$runs[[i]]$path)
+# system.time(lapply(names(getinfo(2154)$runs), function(i) getinfo(2154)$runs[[i]]$path))
+# system.time(foreach(i=names(getinfo(2154)$runs)) %do% getinfo(2154)$runs[[i]]$path)
+# system.time(foreach(i=names(getinfo(2154)$runs)) %dopar% getinfo(2154)$runs[[i]]$path)
 
 ### RCP list functions to write
 # (1) get techniques
@@ -472,7 +474,7 @@ library(doSNOW)
 
 readpstatfiles.rcp <- function(rcp, tech, samples=NULL) {
     flist <- getpstatfiles(rcp, tech)
-    slist <- as.factor(str_match(flist, ';([0-9]*)$')[,2])
+    slist <- as.integer(str_match(flist, ';([0-9]*)$')[,2])
     importsamples <- if(is.null(samples)) slist else samples
     rcpfolder <- sub(basename(rcp$rcppath), '', rcp$rcppath)
     DT.files <- data.table(Sample=slist, fn=names(flist), val=as.character(flist))
