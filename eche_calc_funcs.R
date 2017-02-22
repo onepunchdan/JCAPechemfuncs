@@ -3,11 +3,19 @@ index.toggle <- function(DT, toggle.key, thresh, flip=F) {
     thresh.bools <- if(flip) DT.new[,get(toggle.key)]<=thresh else DT.new[,get(toggle.key)]>thresh
     thresh.inds <- numeric()
     thresh.inds <- 1
-    foreach(i=2:nrow(DT.new)) %do% {
+    for(i in 2:nrow(DT.new)) {
         thresh.inds <- c(thresh.inds,
                          if(thresh.bools[i]==thresh.bools[i-1]) thresh.inds[i-1] else thresh.inds[i-1]+1)
     }
+    if(flip) {
+        DT.new[, thresh.bool:=get(toggle.key)<=thresh]
+    }
+    else {
+        DT.new[, thresh.bool:=get(toggle.key)>thresh]
+    }
+    #DT.new[, thresh.ind:=Eavg.V > shift(Eavg.V, 1, type='lag')]
     DT.new[, `:=`(thresh.ind=thresh.inds, thresh.bool=thresh.bools)]
+    DT.new[, `:=`(thresh.ind=thresh.inds)]
     DT.new[, group.ind:=1:.N, by=thresh.ind]
     DT.new[, group.frac:=group.ind/.N, by=thresh.ind]
     return(DT.new)
@@ -136,6 +144,8 @@ calc.logisfit <- function(DT.iph, ipb=1E-8) {
     # return(modlist)
     calcpmax<-function(m) optimize(function(x) (eo-x)*predict(m, data.frame(x=x)), interval=c(0, 1), maximum=T)
     calcjsc<-function(m) predict(m, data.frame(x=eo))
+    voclo
+    vochi
     calcvoc<-function(m) optimize(function(x) (ipb-predict(m, data.frame(x=x)))^2, interval=c(0, 1))
     DT.fom<-rbindlist(lapply(1:length(modlist), function(i) {
         sweep.idx=as.numeric(strsplit(names(modlist)[i], '_')[[1]][1])
@@ -172,11 +182,11 @@ calc.logisfit2 <- function(DT.iph, eo, ipb=1E-8) {
     }
     DT.new[, sweep.dir:=factor(signs, levels=c(-1, 1), labels=c('cathodic', 'anodic'))]
     DT.new[, sweep.idx:=grp]
-    modlist<-lapply(unique(grp), function(x) tryCatch(fpl.fit(DT.new[sweep.idx==x & Iphoto.A>0]), error=function(e) NULL))
+    modlist<-mclapply(unique(grp), function(x) tryCatch(fpl.fit(DT.new[sweep.idx==x & Iphoto.A>0]), error=function(e) NULL))
     names(modlist)<-unique(DT.new[,paste0(sweep.idx, '_', sweep.dir)])
     calcpmax<-function(m) optimize(function(x) (eo-x)*predict(m, data.frame(x=x)), interval=c(0, 1), maximum=T)
     calcjsc<-function(m) predict(m, data.frame(x=eo))
-    calcvoc<-function(m) optimize(function(x) (ipb-predict(m, data.frame(x=x)))^2, interval=c(0, 1))
+    calcvoc<-function(m) optimize(function(x) (ipb-predict(m, data.frame(x=x)))^2, interval=c(eo-1, eo))
     DT.fom<-rbindlist(lapply(1:length(modlist), function(i) {
         sweep.idx=as.numeric(strsplit(names(modlist)[i], '_')[[1]][1])
         sweep.dir=strsplit(names(modlist)[i], '_')[[1]][2]
@@ -198,31 +208,45 @@ calc.logisfit2 <- function(DT.iph, eo, ipb=1E-8) {
     return(list(fom=DT.fom, mod=modlist))
 }
 
-easylogis<-function(file, eo, sweepidx=2, interd=F, plot=F) {
-    rawdt<-readeche(file)[,.(t.s, Ewe.V, Ach.V, I.A, Toggle, sample_no)]
-    idxdt<-index.toggle(rawdt, toggle.key='Toggle', thresh=0.5)
-    iphdt<-calc.iphoto(idxdt)
-    fit<-calc.logisfit2(iphdt, eo)
-    fomdt<-fit$fom
-    fomdt[, Sample:=rawdt[1]$sample_no]
-    if(plot) {
-        interval<-seq(round(min(rawdt$Ewe.V), 3),
-                      round(max(rawdt$Ewe.V), 3), 1E-3)
-        fitplot<-ggplot() +
-            geom_path(data=idxdt, aes(x=Ewe.V, y=I.A), color='black') +
-            geom_point(data=iphdt, aes(x=Ephoto.V, y=Iphoto.A), color='blue') +
-            geom_line(data=NULL, aes(x=interval, y=predict(fit$mod[[sweepidx]], data.frame(x=interval))), color='red') +
-            ggtitle(paste('Sample', rawdt[1]$sample_no)) +
-            theme_bw()
-        print(fitplot)
-    }
-    if(interd) {
-        return(list(raw=idxdt, iph=iphdt, fom=fomdt))
+easylogis<-function(rawdt, eo, sweepidx=2, interd=F, plot=F) {
+    #rawdt<-readeche(file)[,.(t.s, Ewe.V, Ach.V, I.A, Toggle, sample_no)]
+    snum<-if('Sample' %in% names(rawdt)) rawdt$Sample[1] else rawdt$sample_no[1]
+    if('t.s' %in% names(rawdt)) {
+        idxdt<-index.toggle(rawdt, toggle.key='Toggle', thresh=0.5)
+        iphdt<-calc.iphoto(idxdt)
+        fit<-calc.logisfit2(iphdt, eo)
+        fomdt<-fit$fom
+        suppressWarnings({
+            fomdt[, Sample:=snum]
+        })
+        
+        if(plot) {
+            interval<-seq(round(min(rawdt$Ewe.V), 3),
+                          round(max(rawdt$Ewe.V), 3), 1E-3)
+            fitplot<-ggplot() +
+                geom_path(data=idxdt, aes(x=Ewe.V, y=I.A), color='black') +
+                geom_point(data=iphdt, aes(x=Ephoto.V, y=Iphoto.A), color='blue') +
+                geom_line(data=NULL, aes(x=interval, y=predict(fit$mod[[sweepidx]], data.frame(x=interval))), color='red') +
+                ggtitle(paste('Sample', snum)) +
+                theme_bw()
+            print(fitplot)
+        }
     }
     else {
-        return(fomdt[idx==sweepidx])
+        idxdt<-NA
+        iphdt<-NA
+        fomdt<-data.table(idx=sweepidx, dir=NA, pmax=NA, vmp=NA, jmp=NA, jsc=NA, voc=NA, ff=NA, Sample=snum)
+    }
+    retlist<-list(raw=idxdt, iph=iphdt, fom=fomdt)
+    retfom<-fomdt[idx==sweepidx]
+    if(interd) {
+        return(retlist)
+    }
+    else {
+        return(retfom)
     }
 }
+                                  
 conv.xrf <- function(DT.int, calib='48-800-2000-vacu-3.2__20170201-v1.csv') {
     transitions <- names(DT.int)[!names(DT.int) %in% c('BatchLabel', 'StgLabel', 'StagX', 'StagY', 'StagZ', 'Sample')]
     caldt <- fread(file.path(kd, 'experiments', 'xrfs', 'calibration_libraries', calib))

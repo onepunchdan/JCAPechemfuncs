@@ -7,6 +7,7 @@ library(stringr)
 library(grid)
 library(gridExtra)
 library(gtable)
+library(foreach)
 library(data.table)
 library(ggthemes)
 library(Cairo)
@@ -29,7 +30,7 @@ spectral.colors <- colorRampPalette(c('#9e0142', '#d53e4f', '#f46d43', '#fdae61'
 # env
 jd<-'J:/hte_jcap_app_proto'
 kd<-'K:'
-unztemp<-'E:/unztemp'
+unztemp<-'D:/TEMP'
 
 
 cpng<-function(ggplt, fn=NULL, w=800, h=800) {

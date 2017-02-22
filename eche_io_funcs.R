@@ -67,10 +67,6 @@ readoptdir <- function(dir) {
   return(readoptfiles(list.files(dir, pattern='.opt', full.names=T)))
 }
 
-readexpfiles <- function(exp) {
-
-}
-
 readxrf <- function(f) {
     orbcsv<-fread(f, skip=6, drop=c('StagR', 'MatchName', 'MatchSig', 'CoatThk1', 'CoatThk2','CoatConc'))
 
@@ -236,6 +232,26 @@ getexpfiles <- function(ep, type='pstat_files') {
     return(finaldt[order(technum, Sample)])
 }
 
+readrawfromexp <- function(expdt) {
+    unzdir=file.path(unztemp, basename(dirname(expdt$run_path)), sub('\\.zip$','',basename(expdt$run_path)))
+    target=file.path(unzdir, expdt$filename)
+    if(!dir.exists(unzdir)) {
+        dir.create(unzdir, recursive=T)
+    }
+    if(!file.exists(target)) {
+        unzip(expdt$run_path, files=expdt$filename, exdir=unzdir, overwrite=T, junkpaths=T)
+    }
+    newdt<-fread(target, col.names=unlist(strsplit(expdt$colnames, ',')[[1]]))
+    newdt[, `:=`(Sample=as.numeric(trimws(expdt$Sample)),
+                 technum=as.numeric(trimws(expdt$technum)),
+                 tech=trimws(expdt$tech),
+                 filename=trimws(expdt$filename),
+                 type=trimws(expdt$type))]
+    names(newdt) <- sub('\\)', '', names(newdt))
+    names(newdt) <- sub('\\(', '.', names(newdt))
+    return(newdt[order(technum, Sample, t.s)])
+}
+
 readexpfiles <- function(expdt) {
     runs <- unique(expdt$run_path)
     readzipped <- function(run) {
@@ -257,7 +273,20 @@ readexpfiles <- function(expdt) {
     return(finaldt[order(technum, Sample, t.s)])
 }
 
-
+getpath <- function(timestamp, exper='eche', getexp=T) {
+    processes='L:/processes'
+    if(getexp) {
+        subdir='experiment'
+        ext='.exp'
+    }
+    else {
+        subdir='analysis'
+        ext='.ana'
+    }
+    path=list.files(file.path(processes, subdir, exper), pattern=timestamp, full.names=T)
+    fpath=file.path(path, paste0(timestamp, ext))
+    return(fpath)
+}
 
 
 ## NON-DT functions
@@ -469,8 +498,8 @@ getspecfiles <- function(rcp, tech) {
 }
 
 
-library(foreach)
-library(doSNOW)
+#library(foreach)
+#library(doSNOW)
 
 readpstatfiles.rcp <- function(rcp, tech, samples=NULL) {
     flist <- getpstatfiles(rcp, tech)
