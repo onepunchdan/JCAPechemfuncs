@@ -182,7 +182,7 @@ calc.logisfit2 <- function(DT.iph, eo, ipb=1E-8) {
     }
     DT.new[, sweep.dir:=factor(signs, levels=c(-1, 1), labels=c('cathodic', 'anodic'))]
     DT.new[, sweep.idx:=grp]
-    modlist<-mclapply(unique(grp), function(x) tryCatch(fpl.fit(DT.new[sweep.idx==x & Iphoto.A>0]), error=function(e) NULL))
+    modlist<-lapply(unique(grp), function(x) tryCatch(fpl.fit(DT.new[sweep.idx==x & Iphoto.A>0]), error=function(e) NULL))
     names(modlist)<-unique(DT.new[,paste0(sweep.idx, '_', sweep.dir)])
     calcpmax<-function(m) optimize(function(x) (eo-x)*predict(m, data.frame(x=x)), interval=c(0, 1), maximum=T)
     calcjsc<-function(m) predict(m, data.frame(x=eo))
