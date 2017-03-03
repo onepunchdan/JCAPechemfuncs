@@ -7,14 +7,14 @@ library(stringr)
 library(grid)
 library(gridExtra)
 library(gtable)
-library(foreach)
 library(data.table)
 library(ggthemes)
 library(Cairo)
+library(repr)
 
 library(devtools)
-# install_github('nathanvan/parallelsugar')
-library(parallelsugar)
+#install_github('nathanvan/parallelsugar')
+#library(parallelsugar)
 
 
 gg.colors <- function(n) {
@@ -30,7 +30,7 @@ spectral.colors <- colorRampPalette(c('#9e0142', '#d53e4f', '#f46d43', '#fdae61'
 # env
 jd<-'J:/hte_jcap_app_proto'
 kd<-'K:'
-unztemp<-'D:/TEMP'
+unztemp<-ifelse(dir.exists('D:/TEMP'), 'D:/TEMP', 'E:/TEMP')
 
 
 cpng<-function(ggplt, fn=NULL, w=800, h=800) {
