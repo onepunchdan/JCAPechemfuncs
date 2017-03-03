@@ -138,20 +138,24 @@ alloyplots<-function(fomdt, alloys=c('C', 'D', 'E', 'F', 'G', 'H'), titlestring=
     # merge binaries and single alloys
     bsal<-rbindlist(list(salm_1, salm_0b, all[,names(salm_1),with=F][value>0 & alloy_frac!=0]))
 
+    # fix rounding stuffs
+    bsal[,alloy_sum:=round(alloy_sum, 4)]
+    
     # setup aesthetics and facet labels
+    
     bsub<-bsal[alloy_sum %in% c(0.0022, 0.0044, 0.0066, 0.0110)]
     bsub[,sum_alloys:=factor(alloy_sum)]
     bsub[,Alab:=factor(alloy, levels=levels(factor(alloy)), labels=paste('A =', levels(factor(alloy))))]
     bsub[,vfrac:=round(V/(Bi+V),2)]
     bsub[,Yval:=floor(100*alloy_sum/(Bi+V+alloy_sum))/100]
     bsub[,vx_lab:=factor(vfrac, levels=levels(factor(vfrac)), labels=paste('x =', levels(factor(vfrac))))]
-
     psal[,vfrac:=round(V/(Bi+V),2)]
     psal[,Yval:=alloy_sum/(Bi+V+alloy_sum)]
     psal[,vx_lab:=factor(vfrac, levels=levels(factor(vfrac)), labels=paste('x =', levels(factor(vfrac))))]
 
     # make some plots
     splot<-ggplot(psal, aes(x=Yval, y=pmed*1E5, color=variable)) +
+        theme_bw() +
         geom_line(aes(group=variable)) +
         geom_point() +
         facet_grid(alloy~vx_lab, switch='y') +
@@ -159,40 +163,34 @@ alloyplots<-function(fomdt, alloys=c('C', 'D', 'E', 'F', 'G', 'H'), titlestring=
         ylab(expression(P[max]~(mW/cm^2))) +
         scale_y_continuous(breaks=seq(0, 1, 0.2), limits=c(0., 1)) +
         scale_color_manual(name=expression(A), values=gg.colors(6)) +
-        theme_bw() +
         theme(legend.position='right',
               strip.background=element_blank(),
               text=element_text(size=16),
-              panel.margin=unit(1, 'lines')) +
+              panel.spacing=unit(0.8, 'lines')) +
         ggtitle(titlestring)
 
     bplot<-ggplot(bsub, aes(x=alloy_frac, y=pmed*1E5, color=variable, shape=factor(Yval))) +
+        theme_bw() +    
         geom_point() +
-        geom_line(aes(group=interaction(variable, factor(Yval*100)))) +
+        geom_line(aes(group=interaction(variable, factor(floor(Yval*100))))) +
         facet_grid(Alab~vx_lab, switch='y') +
         xlab(expression(z~'in'~Bi[1-x]*V[x]*O[4+delta]:(A[1-z]*B[z])[y])) +
         ylab(expression(P[max]~(W))) +
         scale_y_continuous(breaks=seq(0, 1, 0.2), limits=c(0., 1)) +
         scale_shape_manual(name=expression(y), values=1:4) +
         scale_color_manual(name=expression(B), values=gg.colors(6)) +
-        theme_bw() +
         theme(legend.position='right',
               strip.background=element_blank(),
               strip.text.x=element_blank(),
               axis.text.y=element_blank(),
               axis.title.y=element_blank(),
               text=element_text(size=16),
-              panel.margin=unit(1, 'lines'))
-
-    # grid.arrange(splot, bplot, ncol=1, heights=c(0.20, 0.80))
-    # library(gtable)
+              panel.spacing=unit(0.8, 'lines'))
 
     sgrob<-ggplotGrob(splot)
     bgrob<-ggplotGrob(bplot)
 
     g<-rbind(sgrob, bgrob, size='first')
     g$widths<-unit.pmax(sgrob$widths, bgrob$widths)
-    print(grid.newpage())
-    print(grid.draw(g))
     return(g)
 }
