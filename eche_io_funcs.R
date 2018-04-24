@@ -40,8 +40,8 @@ readopt <- function(path) {
     dt[, `:=`(sample_no=as.integer(str_match(f, '^Sample([0-9]+)_')[,2]),
               technique=str_match(f, '_([A-Z]+)[0-9]+_(TRANS|DARK)')[,2],
               technum=as.integer(str_match(f, '_[A-Z]+([0-9]+)_(TRANS|DARK)')[,2]),
-              trans=as.integer(str_match(f, '_(TRANS|DARK)([0-9]+)_')[,3]),
-              time=as.character(strptime(str_match(f, '_([0-9]{8}\\.[0-9]{6})\\.[0-9]\\.opt')[,2], format='%Y%m%d.%H%M%S')),
+              #trans=as.integer(str_match(f, '_(TRANS|DARK)([0-9]+)_')[,3]),
+              #time=strptime(str_match(f, '_([0-9]{8}\\.[0-9]{6})\\.[0-9]\\.opt')[,2], format='%Y%m%d.%H%M%S'),
               run=basename(sub(f, '', path))
               )]
     return(dt)
@@ -57,10 +57,6 @@ readechefiles2 <- function(l) {
 
 readechedir <- function(dir) {
   return(readechefiles(list.files(dir, pattern='.txt', full.names=T)))
-}
-
-readoptfiles <- function(l) {
-    return(rbindlist(lapply(l, readopt)))
 }
 
 readoptdir <- function(dir) {
@@ -201,16 +197,17 @@ smoothfom <- function(fom, smoothdt, sigma) {
 
 writefom <- function(df) {
     outdf<-as.data.frame(df)
-    outdf[,!(names(outdf) %in% c('Sample', 'sample_no', 'Label', 'StgLabel')) & apply(outdf, 2, is.numeric)]<-format(outdf[,!(names(outdf) %in% c('Sample', 'sample_no', 'Label', 'StgLabel')) & apply(outdf, 2, is.numeric)], scientific=T, digits=3)
+    outdf[,!(names(outdf) %in% c('Sample', 'sample_no', 'Label', 'StgLabel')) & apply(outdf, 2, is.numeric)]<-format(outdf[,!(names(outdf) %in% c('Sample', 'sample_no', 'Label', 'StgLabel')) & apply(outdf, 2, is.numeric)], scientific=T, digits=6)
     write.table(outdf, file=paste0(deparse(substitute(df)),'.csv'),
                 sep=',', row.names=FALSE, na="NaN", quote=FALSE) #,eol="\r\n",
 }
 
 
-getexpfiles <- function(ep, type='pstat_files') {
-    exp <- readrcp(ep)
+getexpfiles <- function(meta, type='pstat_files') {
+    exp <- meta #readrcp(ep)
     runs <- grep('run__', names(exp), value=T)
     getfilelist <- function(run) {
+        run_use <- exp[[run]]$run_use
         ftechs <- grep('files_technique__', names(exp[[run]]), value=T)
         makefiledt <- function(ft) {
             matlist <- lapply(exp[[run]][[ft]][[type]],
@@ -224,11 +221,12 @@ getexpfiles <- function(ep, type='pstat_files') {
             techstr <- unlist(strsplit(ft, '__'))[2]
             newdt[,tech:=sub('[0-9]+', '', techstr)]
             newdt[,technum:=as.numeric(sub('[A-Za-z]+', '', techstr))]
+            newdt[,run_use:=run_use]
             return(newdt)
         }
         rbindlist(lapply(ftechs, makefiledt))
     }
-    finaldt<-rbindlist(lapply(runs, function(x) getfilelist(x)[,run_path:=file.path(jd, 'run', sub('^/', '', exp[[x]][['run_path']]))]))
+    finaldt<-rbindlist(lapply(runs, function(x) getfilelist(x)[,`:=`(run_idx=x, run_path=file.path(jd, 'run', sub('^/', '', exp[[x]][['run_path']])))]))
     return(finaldt[order(technum, Sample)])
 }
 
@@ -253,10 +251,13 @@ readrawfromexp <- function(expdt) {
 }
 
 readexpfiles <- function(expdt) {
-    runs <- unique(expdt$run_path)
+    runs <- unique(expdt$run_idx)
     readzipped <- function(run) {
-        rundt <- expdt[run_path==run]
-        unzip(run, files=rundt$filename, exdir=unztemp, overwrite=T, junkpaths=T)
+        rundt <- expdt[run_idx==run]
+        run_path <- rundt[1]$run_path
+        unztemp<-tempdir()
+        unztemp<-gsub("\\\\", "/", unztemp)
+        unzip(run_path, files=rundt$filename, exdir=unztemp, overwrite=T, junkpaths=T)
         newdt<-rbindlist(apply(rundt, 1, function(x) fread(file.path(unztemp, x['filename']),
                                                            # skip=x['skip'],
                                                            # nrows=x['nrows'],
@@ -267,12 +268,41 @@ readexpfiles <- function(expdt) {
                                                                                                                        type=trimws(x['type']))]))
         names(newdt) <- sub('\\)', '', names(newdt))
         names(newdt) <- sub('\\(', '.', names(newdt))
+        do.call(file.remove, list(list.files(unztemp, full.names = TRUE)))
         return(newdt)
     }
-    finaldt<-rbindlist(lapply(runs, readzipped))
+    finaldt<-rbindlist(lapply(runs, function(x) readzipped(x)[,run_index:=x]))
     return(finaldt[order(technum, Sample, t.s)])
 }
-
+                               
+readoptfiles <- function(expdt) {
+    runs <- unique(expdt$run_idx)
+    readzipped <- function(run) {
+        rundt <- expdt[run_idx==run]
+        run_path <- rundt[1]$run_path
+        unztemp<-tempdir()
+        unztemp<-gsub("\\\\", "/", unztemp)
+        #command <- function(command){
+        #  system(paste("cmd.exe /c", command))
+        #}
+        #command(paste('7z e -aoa', paste0('-o', unztemp), run_path))
+        unzip(run_path, exdir=unztemp, overwrite=T, junkpaths=T)
+        if('measure_time' %in% names(rundt)){
+            newdt<-rbindlist(lapply(1:nrow(rundt), function(n) readopt(file.path(unztemp, rundt[n]$filename))[,`:=`(run_use=rundt[n]$run_use, filename=rundt[n]$filename, trans=rundt[n]$trans, time=rundt[n]$time, measure_time=rundt[n]$measure_time)]))
+        } else {
+            newdt<-rbindlist(apply(rundt, 1, function(x) readopt(file.path(unztemp, x['filename']))[,`:=`(run_use=x['run_use'], filename=x['filename'])]))
+        }
+        
+        names(newdt) <- sub('\\)', '', names(newdt))
+        names(newdt) <- sub('\\(', '.', names(newdt))
+        do.call(file.remove, list(list.files(unztemp, full.names = TRUE)))
+        return(newdt)
+    }
+    finaldt<-as.data.table(rbindlist(lapply(runs, function(x) readzipped(x)[,run_index:=x])))
+    
+    return(finaldt[order(run_use, technum, sample_no, trans, Wavelength_nm)])
+}
+                              
 getpath <- function(timestamp, exper='eche', getexp=T) {
     processes='L:/processes'
     if(getexp) {
@@ -288,44 +318,66 @@ getpath <- function(timestamp, exper='eche', getexp=T) {
     return(fpath)
 }
 
+getrunfromexp <- function(exppath) {
+    rcp<-readrcp(exppath)
+    runs<-grep('run__', names(rcp), value=T)
+    paths=list()
+    for(run in runs){
+        relrunpath<-dirname(rcp[[run]]$run_path)
+        relrunpath<-substr(relrunpath, 2, nchar(relrunpath))
+        paths<-c(paths, list.files(file.path('J:/hte_jcap_app_proto/run', relrunpath), pattern='\\.zip$', full.names=T))
+    }
+    return(paths)
+}
+                                            
+readana<-function(anapath){
+    anadt<-data.table(filename=sub('^.*fom_files\\.', '', grep('files_multi_run\\.fom_files', names(unlist(readrcp(anapath))), value=T)))
+    anadt[,ana_idx:=sub('\\.files_multi_run\\.fom_files.*$', '', filename)]
+    analst<-list()
+    for(n in 1:nrow(anadt)){
+        analst[[anadt[n]$ana_idx]]<-fread(file.path(dirname(anapath), anadt[n]$filename))
+    }
+    return(analst)
+}
+
 
 ## NON-DT functions
 ##
 
-readana<-function(anapath){
-    frl = function(fname) { # faster readlines
-        s = file.info( fname )$size
-        buf = readChar( fname, s, useBytes=T)
-        strsplit( buf,"\n",fixed=T,useBytes=T)[[1]]
-    }
-    trim <- function (x) gsub("^\\s+|\\s+$", "", x)
-    stxt <- frl(anapath)
+#readana<-function(anapath){
+#    frl = function(fname) { # faster readlines
+#        s = file.info( fname )$size
+#        buf = readChar( fname, s, useBytes=T)
+#        strsplit( buf,"\n",fixed=T,useBytes=T)[[1]]
+#    }
+#    trim <- function (x) gsub("^\\s+|\\s+$", "", x)
+#    stxt <- frl(anapath)#
 
-    dflist<-list()
-    anapathsplit<-unlist(strsplit(anapath, '/'))
-    anafile<-anapathsplit[length(anapathsplit)]
-    anafolder<-sub(anafile, '', anapath)
-    csvlines <- unique(grep('.csv', stxt, fixed=T, value=T))
-    fomfiles <- sapply(csvlines, function(x) trim(strsplit(x, ':', fixed=T)[[1]][1]))
-    for(f in fomfiles){
-        ananame<-paste0('ana', '__', strsplit(f, '__')[[1]][2])
-        fompath<-paste0(anafolder, f)
-        fomcon<-file(fompath)
-        fomhead<-as.numeric(unlist(strsplit(readLines(fomcon, n=1), '\t')))
-        close(fomcon)
-        fomtbl<-read.table(fompath, header=T, sep=',', na.strings='NaN', skip=fomhead[4]+1, nrows=fomhead[3]+1)
-        dflist[[ananame]]<-I(as.data.frame(fomtbl))
-    }
+#    dflist<-list()
+#    anapathsplit<-unlist(strsplit(anapath, '/'))
+#    anafile<-anapathsplit[length(anapathsplit)]
+#    anafolder<-sub(anafile, '', anapath)
+#    csvlines <- unique(grep('.csv', stxt, fixed=T, value=T))
+#    fomfiles <- sapply(csvlines, function(x) trim(strsplit(x, ':', fixed=T)[[1]][1]))
+#    for(f in fomfiles){
+#        ananame<-paste0('ana', '__', strsplit(f, '__')[[1]][2])
+#        fompath<-paste0(anafolder, f)
+#        fomcon<-file(fompath)
+#        fomhead<-as.numeric(unlist(strsplit(readLines(fomcon, n=1), '\t')))
+#        close(fomcon)
+#        fomtbl<-read.table(fompath, header=T, sep=',', na.strings='NaN', skip=fomhead[4]+1, nrows=fomhead[3]+1)
+#        dflist[[ananame]]<-I(as.data.frame(fomtbl))
+#    }
     # }
-    return(dflist)
-}
+#    return(dflist)
+#}
 
 # Takes a single .rcp file path and returns a list with nested lists for params,
 # and filenames.
 readnest <- function(fpath, ext, unzip=F) {
     if(unzip) {
         fn<-strsplit(fpath, '.', fixed=T)[[1]]
-        rcpfile<-paste0(tail(strsplit(fn[1], '/')[[1]], n=1), '.', fn[2], ext)
+        rcpfile<-paste0(tail(strsplit(fn[1], '\\', fixed=T)[[1]], n=1), '.', fn[2], ext)
         filecon<-unz(fpath, filename=rcpfile)
         filezcon<-gzcon(filecon)
         stxt <- readLines(filezcon)
@@ -430,7 +482,7 @@ readrcp <- function(fpath) {
     else{
         rcplist<-readnest(fpath)
     }
-    return(c(rcplist, rcppath=fpath))
+    return(rcplist)
 }
 
 readfom <- function(fompath, fn=F) {

@@ -30,7 +30,7 @@ spectral.colors <- colorRampPalette(c('#9e0142', '#d53e4f', '#f46d43', '#fdae61'
 # env
 jd<-'J:/hte_jcap_app_proto'
 kd<-'K:'
-unztemp<-ifelse(dir.exists('D:/TEMP'), 'D:/TEMP', 'E:/TEMP')
+#unztemp<-ifelse(dir.exists('D:/TEMP'), 'D:/TEMP', 'E:/TEMP')
 
 
 cpng<-function(ggplt, fn=NULL, w=800, h=800) {

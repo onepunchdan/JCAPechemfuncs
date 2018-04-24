@@ -1,4 +1,4 @@
-alloyplots<-function(fomdt, alloys=c('C', 'D', 'E', 'F', 'G', 'H'), fom='pmax', titlestring='labelme', aggmethod='', yscale=1E3/0.0058, maxy=1, miny=0, plot=T, sigout=2) {
+alloyplots<-function(fomdt, alloys=c('C', 'D', 'E', 'F', 'G', 'H'), fom='pmax', titlestring='labelme', aggmethod='', yscale=1E3/0.0058, maxy=1, miny=0, sigout=2) {
     
     if(aggmethod=='top2') {
         aggfunc={function(x) mean(na.omit(sort(x,decreasing=T)[1:2]))}
@@ -171,7 +171,9 @@ alloyplots<-function(fomdt, alloys=c('C', 'D', 'E', 'F', 'G', 'H'), fom='pmax', 
     bsub[,vx_lab:=factor(vfrac, levels=levels(factor(vfrac)), labels=paste('x =', levels(factor(vfrac))))]
     psal[,vfrac:=round(V/(Bi+V),2)]
     #psal[,Yval:=alloy_sum/(Bi+V+alloy_sum)]
-    psal[,Yval:=round(alloy_sum/(Bi+V), 3)]
+    psal[,Yval:=round(alloy_sum/(Bi+V), 2)]
+    psal[vfrac==0.52 & Yval==0.02, Yval:=0.01]
+    psal[vfrac==0.52 & Yval==0.05, Yval:=0.04]
     #psal[,vx_lab:=factor(vfrac, levels=levels(factor(vfrac)), labels=biv_labels)]
     psal[,vx_lab:=factor(vfrac, levels=levels(factor(vfrac)), labels=paste('x =', levels(factor(vfrac))))]
 
@@ -223,15 +225,5 @@ alloyplots<-function(fomdt, alloys=c('C', 'D', 'E', 'F', 'G', 'H'), fom='pmax', 
               text=element_text(size=16),
               panel.spacing=unit(0.8, 'lines'))
 
-    sgrob<-ggplotGrob(splot)
-    bgrob<-ggplotGrob(bplot)
-
-    g<-rbind(sgrob, bgrob, size='first')
-    g$widths<-unit.pmax(sgrob$widths, bgrob$widths)
-    if(plot) {
-        return(g)
-    }
-    else {
-        return(list(psal, bsub))
-    }
+    return(list(psal, bsub))
 }
