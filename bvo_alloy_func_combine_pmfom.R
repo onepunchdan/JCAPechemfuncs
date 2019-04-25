@@ -1,32 +1,25 @@
-alloyplots<-function(fomdt, alloys=c('C', 'D', 'E', 'F', 'G', 'H'), fom='pmax', titlestring='labelme', aggmethod='', yscale=1E3/0.0058, maxy=1, miny=0, plot=T, sigout=2) {
-    
+alloyplots<-function(pmfom, alloys=c('C', 'D', 'E', 'F', 'G', 'H'), fom='pmax', titlestring='labelme', aggmethod='', yscale=1, maxy=1, miny=0, plot=T, sigout=2) {
+    mymed={function(x) if(length(x)>1) na.omit(sort(x, decreasing=T))[floor(length(x)/2)] else x}
     if(aggmethod=='top2') {
         aggfunc={function(x) mean(na.omit(sort(x,decreasing=T)[1:2]))}
     }
     else if (aggmethod=='mymed'){
-        aggfunc={function(x) if(length(x)>1) na.omit(sort(x, decreasing=T))[floor(length(x)/2)] else x}
+        aggfunc=mymed
     }
     else {
         aggfunc={function(x) median(na.omit(x))}
     }
     
     usefom<-parse(text=fom)
-        
-    pm<-getpm(72)
-    pm[,`:=`(Bi=A*0.156, V=(A*0.144+B*0.11), C_=C*0.022, D_=D*0.022, E_=E*0.022, F_=F*0.022, G_=G*0.022, H_=H*0.022)]
-    pm[,alloy_sum:=C_+D_+E_+F_+G_+H_]
-    pm[,`:=`(BiV_ratio=round(Bi/V, 1))]
-    setkey(fomdt, Sample)
-    setkey(pm, Sample)
 
     # single alloys
-    sal<-pm[fomdt][A+B>0][D+E+F+G+H==0 | C+E+F+G+H==0 | C+D+F+G+H==0 | C+D+E+G+H==0 | C+D+E+F+H==0 | C+D+E+F+G==0]
-    salm<-melt(sal[!is.na(eval(usefom))][,.(Bi=aggfunc(Bi), V=aggfunc(V), pmed=aggfunc(eval(usefom)), jmed=aggfunc(jsc), Sample=Sample[which(eval(usefom)==aggfunc(eval(usefom)))], mean_pmed=mean(eval(usefom)), num_smps=.N, stdev_pmed=sd(eval(usefom)), mean_pmed_nsig=mean(eval(usefom)[eval(usefom)>=mean(eval(usefom))-sigout*sd(eval(usefom)) & eval(usefom)<=mean(eval(usefom))+sigout*sd(eval(usefom))]), stdev_pmed_nsig=sd(eval(usefom)[eval(usefom)>=mean(eval(usefom))-sigout*sd(eval(usefom)) & eval(usefom)<=mean(eval(usefom))+sigout*sd(eval(usefom))])), by=list( C_, D_, E_, F_, G_, H_, alloy_sum, BiV_ratio)], id.vars=c('Bi', 'V', 'pmed', 'jmed', 'alloy_sum', 'BiV_ratio', 'mean_pmed', 'stdev_pmed', 'Sample', 'mean_pmed_nsig', 'stdev_pmed_nsig', 'num_smps'))
+    sal<-pmfom[A+B>0][D+E+F+G+H==0 | C+E+F+G+H==0 | C+D+F+G+H==0 | C+D+E+G+H==0 | C+D+E+F+H==0 | C+D+E+F+G==0]
+    salm<-melt(sal[!is.na(eval(usefom))][,.(pmed=aggfunc(eval(usefom)), jmed=aggfunc(jsc), Sample=Sample[which(eval(usefom)==aggfunc(eval(usefom)))], mean_pmed=mean(eval(usefom)), num_smps=.N, stdev_pmed=sd(eval(usefom)), mean_pmed_nsig=mean(eval(usefom)[eval(usefom)>=mean(eval(usefom))-sigout*sd(eval(usefom)) & eval(usefom)<=mean(eval(usefom))+sigout*sd(eval(usefom))]), stdev_pmed_nsig=sd(eval(usefom)[eval(usefom)>=mean(eval(usefom))-sigout*sd(eval(usefom)) & eval(usefom)<=mean(eval(usefom))+sigout*sd(eval(usefom))])), by=list(Bi, V, C_, D_, E_, F_, G_, H_, alloy_sum, BiV_ratio)], id.vars=c('Bi', 'V', 'pmed', 'jmed', 'alloy_sum', 'BiV_ratio', 'mean_pmed', 'stdev_pmed', 'Sample', 'mean_pmed_nsig', 'stdev_pmed_nsig', 'num_smps'))
     salm[,variable:=factor(variable, levels=c('C_', 'D_', 'E_', 'F_', 'G_', 'H_'), labels=alloys)]
 
     # pures
-    pur<-pm[fomdt][A+B>0][C+D+E+F+G+H==0]
-    purm<-melt(pur[!is.na(eval(usefom))][,.(Bi=aggfunc(Bi), V=aggfunc(V), pmed=aggfunc(eval(usefom)), jmed=aggfunc(jsc), Sample=Sample[which(eval(usefom)==aggfunc(eval(usefom)))], mean_pmed=mean(eval(usefom)), num_smps=.N, stdev_pmed=sd(eval(usefom)), mean_pmed_nsig=mean(eval(usefom)[eval(usefom)>=mean(eval(usefom))-sigout*sd(eval(usefom)) & eval(usefom)<=mean(eval(usefom))+sigout*sd(eval(usefom))]), stdev_pmed_nsig=sd(eval(usefom)[eval(usefom)>=mean(eval(usefom))-sigout*sd(eval(usefom)) & eval(usefom)<=mean(eval(usefom))+sigout*sd(eval(usefom))])), by=list( C_, D_, E_, F_, G_, H_, alloy_sum, BiV_ratio)], id.vars=c('Bi', 'V', 'pmed', 'jmed', 'alloy_sum', 'BiV_ratio', 'mean_pmed', 'stdev_pmed', 'Sample', 'mean_pmed_nsig', 'stdev_pmed_nsig', 'num_smps'))
+    pur<-pmfom[A+B>0][C+D+E+F+G+H==0]
+    purm<-melt(pur[!is.na(eval(usefom))][,.(pmed=aggfunc(eval(usefom)), jmed=aggfunc(jsc), Sample=Sample[which(eval(usefom)==aggfunc(eval(usefom)))], mean_pmed=mean(eval(usefom)), num_smps=.N, stdev_pmed=sd(eval(usefom)), mean_pmed_nsig=mean(eval(usefom)[eval(usefom)>=mean(eval(usefom))-sigout*sd(eval(usefom)) & eval(usefom)<=mean(eval(usefom))+sigout*sd(eval(usefom))]), stdev_pmed_nsig=sd(eval(usefom)[eval(usefom)>=mean(eval(usefom))-sigout*sd(eval(usefom)) & eval(usefom)<=mean(eval(usefom))+sigout*sd(eval(usefom))])), by=list(Bi, V, C_, D_, E_, F_, G_, H_, alloy_sum, BiV_ratio)], id.vars=c('Bi', 'V', 'pmed', 'jmed', 'alloy_sum', 'BiV_ratio', 'mean_pmed', 'stdev_pmed', 'Sample', 'mean_pmed_nsig', 'stdev_pmed_nsig', 'num_smps'))
     purm[,variable:=factor(variable, levels=c('C_', 'D_', 'E_', 'F_', 'G_', 'H_'), labels=alloys)]
 
     # merge pure and single alloys
@@ -35,37 +28,37 @@ alloyplots<-function(fomdt, alloys=c('C', 'D', 'E', 'F', 'G', 'H'), fom='pmax', 
 
     # group into binaries
 
-    cgrp<-pm[fomdt][A+B>0][(C+D>0 & E+F+G+H==0) |
+    cgrp<-pmfom[A+B>0][(C+D>0 & E+F+G+H==0) |
                                        (C+E>0 & D+F+G+H==0) |
                                        (C+F>0 & D+E+G+H==0) |
                                        (C+G>0 & D+E+F+H==0) |
                                        (C+H>0 & D+E+F+G==0)]
 
-    dgrp<-pm[fomdt][A+B>0][(D+C>0 & E+F+G+H==0) |
+    dgrp<-pmfom[A+B>0][(D+C>0 & E+F+G+H==0) |
                                        (D+E>0 & C+F+G+H==0) |
                                        (D+F>0 & C+E+G+H==0) |
                                        (D+G>0 & C+E+F+H==0) |
                                        (D+H>0 & C+E+F+G==0)]
 
-    egrp<-pm[fomdt][A+B>0][(E+C>0 & D+F+G+H==0) |
+    egrp<-pmfom[A+B>0][(E+C>0 & D+F+G+H==0) |
                                        (E+D>0 & C+F+G+H==0) |
                                        (E+F>0 & C+D+G+H==0) |
                                        (E+G>0 & C+D+F+H==0) |
                                        (E+H>0 & C+D+F+G==0)]
 
-    fgrp<-pm[fomdt][A+B>0][(F+C>0 & D+E+G+H==0) |
+    fgrp<-pmfom[A+B>0][(F+C>0 & D+E+G+H==0) |
                                        (F+D>0 & C+E+G+H==0) |
                                        (F+E>0 & C+D+G+H==0) |
                                        (F+G>0 & C+D+E+H==0) |
                                        (F+H>0 & C+D+E+G==0)]
 
-    ggrp<-pm[fomdt][A+B>0][(G+C>0 & D+E+F+H==0) |
+    ggrp<-pmfom[A+B>0][(G+C>0 & D+E+F+H==0) |
                                        (G+D>0 & C+E+F+H==0) |
                                        (G+E>0 & C+D+F+H==0) |
                                        (G+F>0 & C+D+E+H==0) |
                                        (G+H>0 & C+D+E+F==0)]
 
-    hgrp<-pm[fomdt][A+B>0][(H+C>0 & D+E+F+G==0) |
+    hgrp<-pmfom[A+B>0][(H+C>0 & D+E+F+G==0) |
                                        (H+D>0 & C+E+F+G==0) |
                                        (H+E>0 & C+D+F+G==0) |
                                        (H+F>0 & C+D+E+G==0) |
@@ -189,46 +182,46 @@ alloyplots<-function(fomdt, alloys=c('C', 'D', 'E', 'F', 'G', 'H'), fom='pmax', 
         y_label<-usefom
     }
             
-        
-    splot<-ggplot(psal, aes(x=Yval, y=pmed*yscale, color=variable)) +
-        theme_bw() +
-        geom_line(aes(group=variable), size=0.3) +
-        geom_point(size=1) +
-        facet_grid(alloy~vx_lab, switch='y') +
-        xlab(expression(y~'in'~Bi[1-x]*V[x]*O[4+delta]:A[y])) +
-        ylab(y_label) +
-        scale_y_continuous(breaks=seq(miny, maxy, length.out=5), limits=c(miny, maxy)) +
-        scale_color_manual(name=expression(A), values=gg.colors(6)) +
-        theme(legend.position='right',
-              strip.background=element_blank(),
-              text=element_text(size=16),
-              panel.spacing=unit(0.8, 'lines')) +
-        ggtitle(titlestring)
-
-    bplot<-ggplot(bsub, aes(x=alloy_frac, y=pmed*yscale, color=variable, shape=factor(Yval))) +
-        theme_bw() +    
-        geom_point() +
-        geom_line(aes(group=interaction(variable, factor(Yval))), size=0.3) +
-        facet_grid(Alab~vx_lab, switch='y') +
-        xlab(expression(z~'in'~Bi[1-x]*V[x]*O[4+delta]:(A[1-z]*B[z])[y])) +
-        ylab(y_label) +
-        scale_y_continuous(breaks=seq(miny, maxy, length.out=5), limits=c(miny, maxy)) +
-        scale_shape_manual(name=expression(y), values=1:4) +
-        scale_color_manual(name=expression(B), values=gg.colors(6)) +
-        theme(legend.position='right',
-              strip.background=element_blank(),
-              strip.text.x=element_blank(),
-              axis.text.y=element_blank(),
-              axis.title.y=element_blank(),
-              text=element_text(size=16),
-              panel.spacing=unit(0.8, 'lines'))
-
-    sgrob<-ggplotGrob(splot)
-    bgrob<-ggplotGrob(bplot)
-
-    g<-rbind(sgrob, bgrob, size='first')
-    g$widths<-unit.pmax(sgrob$widths, bgrob$widths)
     if(plot) {
+        splot<-ggplot(psal, aes(x=Yval, y=pmed*yscale, color=variable)) +
+            theme_bw() +
+            geom_line(aes(group=variable)) +
+            geom_point() +
+            facet_grid(alloy~vx_lab, switch='y') +
+            xlab(expression(y~'in'~Bi[1-x]*V[x]*O[4+delta]:A[y])) +
+            ylab(y_label) +
+            scale_y_continuous(breaks=seq(miny, maxy, length.out=5), limits=c(miny, maxy)) +
+            scale_color_manual(name=expression(A), values=gg.colors(6)) +
+            theme(legend.position='right',
+                  strip.background=element_blank(),
+                  text=element_text(size=16),
+                  panel.spacing=unit(0.8, 'lines')) +
+            ggtitle(titlestring)
+
+        bplot<-ggplot(bsub, aes(x=alloy_frac, y=pmed*yscale, color=variable, shape=factor(Yval))) +
+            theme_bw() +    
+            geom_point() +
+            geom_line(aes(group=interaction(variable, factor(Yval)))) +
+            facet_grid(Alab~vx_lab, switch='y') +
+            xlab(expression(z~'in'~Bi[1-x]*V[x]*O[4+delta]:(A[1-z]*B[z])[y])) +
+            ylab(y_label) +
+            scale_y_continuous(breaks=seq(miny, maxy, length.out=5), limits=c(miny, maxy)) +
+            scale_shape_manual(name=expression(y), values=1:4) +
+            scale_color_manual(name=expression(B), values=gg.colors(6)) +
+            theme(legend.position='right',
+                  strip.background=element_blank(),
+                  strip.text.x=element_blank(),
+                  axis.text.y=element_blank(),
+                  axis.title.y=element_blank(),
+                  text=element_text(size=16),
+                  panel.spacing=unit(0.8, 'lines'))
+
+        sgrob<-ggplotGrob(splot)
+        bgrob<-ggplotGrob(bplot)
+
+        g<-rbind(sgrob, bgrob, size='first')
+        g$widths<-unit.pmax(sgrob$widths, bgrob$widths)
+    
         return(g)
     }
     else {

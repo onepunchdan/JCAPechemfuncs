@@ -247,9 +247,9 @@ easylogis<-function(rawdt, eo, sweepidx=2, interd=F, plot=F) {
     }
 }
                                   
-conv.xrf <- function(DT.int, calib='48-800-2000-vacu-3.2__20170201-v1.csv') {
+conv.xrf <- function(DT.int, calib='48-800-2000-vacu-3.2__20180726-v1-medTa.csv') {
     transitions <- names(DT.int)[!names(DT.int) %in% c('BatchLabel', 'StgLabel', 'StagX', 'StagY', 'StagZ', 'Sample')]
-    caldt <- fread(file.path(kd, 'experiments', 'xrfs', 'calibration_libraries', calib))
+    caldt <- fread(file.path(kd, 'experiments', 'xrfs', 'user', 'calibration_libraries', calib))
     DT.new <- copy(DT.int)
     for(t in transitions) {
         calind <- match(t, sub('\\.', '', caldt$transition))
