@@ -1,21 +1,20 @@
 setwd('~')
-# library(png)
 library(reshape2)
-library(akima)
 library(ggplot2)
 library(stringr)
 library(grid)
-library(gridExtra)
-library(gtable)
 library(data.table)
 library(viridis)
-library(ggthemes)
-library(Cairo)
-library(repr)
-
+# library(Cairo)
+# library(png)
+# library(akima)
+# library(gridExtra)
+# library(gtable)
+# library(ggthemes)
+# library(repr)
 # library(devtools)
-#install_github('nathanvan/parallelsugar')
-#library(parallelsugar)
+# install_github('nathanvan/parallelsugar')
+# library(parallelsugar)
 
 
 gg.colors <- function(n) {
@@ -34,36 +33,36 @@ kd<-'K:'
 #unztemp<-ifelse(dir.exists('D:/TEMP'), 'D:/TEMP', 'E:/TEMP')
 
 
-cpng<-function(ggplt, fn=NULL, w=800, h=800) {
-    if(is.null(fn)){
-        fn=paste0(deparse(substitute(ggplt)),'.png')
-    }
-    CairoPNG(filename=fn, width=w, height=h)
-    print(ggplt)
-    dev.off()
-}
+# cpng<-function(ggplt, fn=NULL, w=800, h=800) {
+#     if(is.null(fn)){
+#         fn=paste0(deparse(substitute(ggplt)),'.png')
+#     }
+#     CairoPNG(filename=fn, width=w, height=h)
+#     print(ggplt)
+#     dev.off()
+# }
 
-gpng<-function(ggplt, fn=NULL, w=800, h=800) {
-    if(is.null(fn)){
-        fn=paste0(deparse(substitute(ggplt)),'.png')
-    }
-    CairoPNG(filename=fn, width=w, height=h)
-    print(grid.newpage())
-    print(grid.draw(ggplt))
-    dev.off()
-}
+# gpng<-function(ggplt, fn=NULL, w=800, h=800) {
+#     if(is.null(fn)){
+#         fn=paste0(deparse(substitute(ggplt)),'.png')
+#     }
+#     CairoPNG(filename=fn, width=w, height=h)
+#     print(grid.newpage())
+#     print(grid.draw(ggplt))
+#     dev.off()
+# }
 
-theme_fivethirtyeight<-function (base_size = 20, base_family = "sans")
-{
-    (theme_foundation(base_size = base_size, base_family = base_family) +
-         theme(line = element_line(colour = "black"), rect = element_rect(fill = ggthemes_data$fivethirtyeight["ltgray"],
-                                                                          linetype = 0, colour = NA), text = element_text(colour = ggthemes_data$fivethirtyeight["dkgray"]),
-               # axis.title = element_blank(), axis.text = element_text(),
-               axis.ticks = element_blank(), axis.line = element_blank(),
-               legend.background = element_rect(), legend.position = "bottom",
-               legend.direction = "horizontal", legend.box = "vertical",
-               panel.grid = element_line(colour = NULL), panel.grid.major = element_line(colour = ggthemes_data$fivethirtyeight["medgray"]),
-               panel.grid.minor = element_blank(), plot.title = element_text(hjust = 0,
-                                                                             size = rel(1.5), face = "bold"), plot.margin = unit(c(1,
-                                                                                                                                   1, 1, 1), "lines"), strip.background = element_rect()))
-}
+# theme_fivethirtyeight<-function (base_size = 20, base_family = "sans")
+# {
+#     (theme_foundation(base_size = base_size, base_family = base_family) +
+#          theme(line = element_line(colour = "black"), rect = element_rect(fill = ggthemes_data$fivethirtyeight["ltgray"],
+#                                                                           linetype = 0, colour = NA), text = element_text(colour = ggthemes_data$fivethirtyeight["dkgray"]),
+#                # axis.title = element_blank(), axis.text = element_text(),
+#                axis.ticks = element_blank(), axis.line = element_blank(),
+#                legend.background = element_rect(), legend.position = "bottom",
+#                legend.direction = "horizontal", legend.box = "vertical",
+#                panel.grid = element_line(colour = NULL), panel.grid.major = element_line(colour = ggthemes_data$fivethirtyeight["medgray"]),
+#                panel.grid.minor = element_blank(), plot.title = element_text(hjust = 0,
+#                                                                              size = rel(1.5), face = "bold"), plot.margin = unit(c(1,
+#                                                                                                                                    1, 1, 1), "lines"), strip.background = element_rect()))
+# }

@@ -277,3 +277,27 @@ smoothxrf<-function(intdt, nx, ny) {
     }
     return(outdt)
 }
+
+interpcomps <- function(xrfdt, fomdt, xrfpm, fompm) {
+    setkey(xrfpm, Sample)
+    setkey(fompm, Sample)
+    setkey(xrfdt, Sample)
+    setkey(fomdt, Sample)
+    xrfsmps <- xrfpm[xrfdt]$Sample
+    inx <- xrfpm[xrfdt]$x
+    iny <- xrfpm[xrfdt]$y
+    nmol_cols <- grep('\\.nmol', names(xrfdt), value=T)
+    nmol_cols <- Filter(function(nc) all(!is.na(xrfdt[[nc]])), nmol_cols)
+    fomsmps <- fompm[fomdt]$Sample
+    outx <- sort(unique(fompm[fomdt]$x))
+    outy <- sort(unique(fompm[fomdt]$y))
+    outdt <- data.table(Sample=fompm[fomdt]$Sample, x=fompm[fomdt]$x, y=fompm[fomdt]$y)
+    setkey(outdt, x, y)
+    for(nc in nmol_cols) {
+        ilist <- interp(x=inx, y=iny, z=xrfdt[[nc]], xo=outx, yo=outy, extrap=T, linear=F)
+        idt <- as.data.table(interp2xyz(ilist, data.frame=T))
+        setkey(idt, x, y)
+        outdt[[nc]] <- idt[outdt]$z
+    }
+    return(outdt)
+}
