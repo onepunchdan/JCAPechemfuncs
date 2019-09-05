@@ -509,7 +509,8 @@ readana<-function(ts, fomname='I.A_photo', dt=T, exper='eche'){
                         mstr<-ff[[f]]
                         mparts<-strsplit(mstr, ';')[[1]]
                         if(grepl(fomname, mparts[2])){
-                            csvlist<-c(csvlist, list(data.table(plate_id=meta$plate_ids, idx=i, dir=anafolder, fn=f, cols=mparts[2], skip=mparts[3], len=mparts[4])))
+                            pid<-ifelse(is.null(meta$plate_ids), sub("^.*plate_id ", "", blk$description), meta$plate_ids)
+                            csvlist<-c(csvlist, list(data.table(plate_id=pid, idx=i, dir=anafolder, fn=f, cols=mparts[2], skip=mparts[3], len=mparts[4])))
                         }
                     }
                 }
@@ -592,8 +593,7 @@ readanablk <- function(ts, blk, exper='eche'){
     csvlist<-list()
     for(i in idxs){
         blk<-meta[[i]]
-#         pid = meta$plate_ids
-        pid = sub("^.*plate_id ", "", blk$description)
+        pid <- ifelse(is.null(meta$plate_ids), sub("^.*plate_id ", "", blk$description), meta$plate_ids)
         if('files_multi_run' %in% names(blk)) {
             fmr<-blk[['files_multi_run']]
             if('fom_files' %in% names(fmr)) {
