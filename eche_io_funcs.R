@@ -80,7 +80,11 @@ readxrf <- function(f) {
     indWt <- which(names(orbcsv) == "Wt%")
     indAt <- which(names(orbcsv) == "At%")
     indLbl <- which(names(orbcsv) == "StgLabel")
-    extracol <- indLbl + 4
+    if('' %in% names(orbcsv)){
+        extracol <- indLbl + 4
+    } else {
+        extracol <- 0
+    }
     if (length(indWt) == 0) {
         setnames(orbcsv, "Inte", "BatchLabel")
         return(list(Int = orbcsv[, -extracol, with = F]))
@@ -93,6 +97,21 @@ readxrf <- function(f) {
             At = orbcsv[, -keepAt, with = F]))
     }
 }
+
+readzipped_eche <- function(zpath, fn){
+    filecon <- unz(zpath, filename = fn)
+    filezcon <- gzcon(filecon)
+    stxt <- readLines(filezcon)
+    close(filezcon)
+    
+    cline<-grep('%column_headings=', stxt)
+    col_names<-strsplit(sub('%column_headings=', '', stxt[cline]), '\t')[[1]]
+    sdt<-as.data.table(t(as.data.table(lapply(stxt[cline+1:length(stxt)], function(x) strsplit(x, '\t')[[1]]))))
+    names(sdt)<-sub('\\(', '.', sub(')', '', col_names))
+                                          
+    return(sdt)
+}
+
 
 readpm <- function(f) {
     pmdt <- fread(f, skip = 2)
@@ -227,6 +246,24 @@ getexpfiles <- function(meta, type = "pstat_files") {
         run_path = file.path(jd, "run", sub("^/", "", exp[[x]][["run_path"]])))]))
     return(finaldt[order(technum, Sample)])
 }
+                                
+getecherunfiles <- function(relzpath, type = "pstat_files"){
+    meta <- readrcp(findrunz(relzpath))
+    fileblocks <- grep("files_technique__", names(meta), value = T)
+    makefiledt <- function(fblk) {
+        matlist <- lapply(meta[[fblk]][[type]], function(x) matrix(unlist(strsplit(x,
+            ";")), ncol = 3))
+        newdt <- as.data.table(do.call(rbind, matlist))
+        setnames(newdt, c("type", "colnames", "Sample"))
+        newdt[, `:=`(filename, names(matlist))]
+        newdt[, `:=`(Sample, as.numeric(Sample))]
+        techstr <- unlist(strsplit(fblk, "__"))[2]
+        newdt[, `:=`(tech, sub("[0-9]+", "", techstr))]
+        newdt[, `:=`(technum, as.numeric(sub("[A-Za-z]+", "", techstr)))]
+        return(newdt)
+    }
+    finaldt <- rbindlist(lapply(fileblocks, function(x) makefiledt(x)[, `:=`(run_path = file.path(jd, "run", sub("^/", "", relzpath)))]))
+}
 
 getoptfiles <- function(meta, type = "spectrum_files") {
     exp <- meta  #readrcp(ep)
@@ -285,6 +322,26 @@ readrawfromexp <- function(expdt) {
         x)]))
     return(finaldt[order(technum, Sample)])
 }
+                                
+readecherunfiles <- function(rundt) {
+    unztemp <- tempdir()
+    unztemp <- gsub("\\\\", "/", unztemp)
+    runlist <- list()
+    for (i in 1:dim(rundt)[1]) {
+        unzip(rundt[i]$run_path, files = rundt[i]$filename, exdir = unztemp, overwrite = T, junkpaths = T)
+        rdt <- fread(file.path(unztemp, rundt[i]$filename), skip = 15, header = F, colClasses = rep("numeric",
+              length(unlist(strsplit(rundt[i]$colnames, ",")[[1]]))), col.names = unlist(strsplit(rundt[i]$colnames,
+              ",")[[1]]))[, `:=`(Sample = as.numeric(trimws(rundt[i]$Sample)),
+            technum = as.numeric(trimws(rundt[i]$technum)), tech = trimws(rundt[i]$tech),
+            filename = trimws(rundt[i]$filename), type = trimws(rundt[i]$type))]
+        runlist <- c(runlist, list(rdt))
+    }
+    newdt <- rbindlist(runlist)
+    names(newdt) <- sub("\\)", "", names(newdt))
+    names(newdt) <- sub("\\(", ".", names(newdt))
+    do.call(file.remove, list(list.files(unztemp, full.names = TRUE)))
+    return(newdt[order(technum, Sample, t.s)])
+}
 
 readexpfiles <- function(expdt) {
     runs <- unique(expdt$run_idx)
@@ -339,7 +396,7 @@ getanafiles <- function(meta, type = "inter_files") {
         rbindlist(lapply(ftechs, makefiledt), fill = T)
     }
     finaldt <- rbindlist(lapply(runs, function(x) getfilelist(x)[, `:=`(ana_idx = x,
-        ana_path = list.files(file.path(jd, "analysis", "eche"), pattern = ana$name,
+        ana_path = list.files(file.path(jd, "analysis", basename(dirname(ana$experiment_path))), pattern = ana$name,
             full.names = T)[1])]), fill = T)
     return(finaldt[order(ana_idx, technum, Sample)])
 }
@@ -386,7 +443,6 @@ readoptfiles <- function(expdt) {
 }
 
 getpath <- function(timestamp, exper = "eche", getexp = T) {
-    processes = "L:/processes"
     if (getexp) {
         subdir = "experiment"
         ext = ".exp"
@@ -394,37 +450,37 @@ getpath <- function(timestamp, exper = "eche", getexp = T) {
         subdir = "analysis"
         ext = ".ana"
     }
-    path = list.files(file.path(processes, subdir, exper), pattern = timestamp, full.names = T)
+    path = list.files(file.path(ld, subdir, exper), pattern = timestamp, full.names = T)
     fpath = file.path(path, paste0(timestamp, ext))
     return(fpath)
 }
 findexpz <- function(timestamp, type = "eche") {
-    path = list.files(file.path("J:/hte_jcap_app_proto/experiment", type), pattern = paste0(timestamp,
+    path = list.files(file.path(jd, "experiment", type), pattern = paste0(timestamp,
         ".*\\.zip$"), full.names = T)
     fpath = path[which.max(as.numeric(sub("\\.copied-[0-9]+P[DS]T\\.zip$", "", basename(path))))]
     return(fpath)
 }
 findanaz <- function(timestamp, type = "eche") {
-    path = list.files(file.path("J:/hte_jcap_app_proto/analysis", type), pattern = paste0(timestamp,
+    path = list.files(file.path(jd, "analysis", type), pattern = paste0(timestamp,
         ".*\\.zip$"), full.names = T)
     fpath = path[which.max(as.numeric(sub("\\.copied-[0-9]+P[DS]T\\.zip$", "", basename(path))))]
     return(fpath)
 }
 findrunz <- function(relp) {
     zipstr = sub("\\.done", "\\.*\\.zip$", basename(relp))
-    path = list.files(file.path("J:/hte_jcap_app_proto/run", dirname(relp)), pattern = zipstr,
+    path = list.files(file.path(jd, "run", dirname(relp)), pattern = zipstr,
         full.names = T)
     return(path)
 }
 findexp <- function(timestamp, type = "eche") {
-    path = list.files(file.path("L:/processes/experiment", type), pattern = paste0(timestamp),
+    path = list.files(file.path(ld, "experiment", type), pattern = paste0(timestamp),
         full.names = T)
     fpath = path[which.max(as.numeric(sub("\\.copied-[0-9]+P[DS]T$|\\.done$|\\.run$",
         "", basename(path))))]
     return(list.files(fpath, pattern = "\\.exp$", full.names = T))
 }
 findana <- function(timestamp, type = "eche") {
-    path = list.files(file.path("L:/processes/analysis", type), pattern = paste0(timestamp),
+    path = list.files(file.path(ld, "analysis", type), pattern = paste0(timestamp),
         full.names = T)
     fpath = path[which.max(as.numeric(sub("\\.copied-[0-9]+P[DS]T$|\\.done$|\\.run$",
         "", basename(path))))]
@@ -437,7 +493,7 @@ getrunfromexp <- function(exppath) {
     for (run in runs) {
         relrunpath <- dirname(rcp[[run]]$run_path)
         relrunpath <- substr(relrunpath, 2, nchar(relrunpath))
-        paths <- c(paths, list.files(file.path("J:/hte_jcap_app_proto/run", relrunpath),
+        paths <- c(paths, list.files(file.path(jd, "run", relrunpath),
             pattern = "\\.zip$", full.names = T))
     }
     return(paths)
@@ -509,8 +565,8 @@ readanalst <- function(ts, exper = "eche") {
     csvlist <- list()
     for (i in idxs) {
         blk <- meta[[i]]
-        pid <- ifelse(is.null(meta$plate_ids), sub("^.*plate_id ", "", blk$description),
-            meta$plate_ids)
+#         pid <- ifelse(is.null(meta$plate_ids), sub("^.*plate_id ", "", blk$description),
+#             meta$plate_ids)
         if ("files_multi_run" %in% names(blk)) {
             fmr <- blk[["files_multi_run"]]
             if ("fom_files" %in% names(fmr)) {
@@ -520,8 +576,13 @@ readanalst <- function(ts, exper = "eche") {
                   if (grep("csv_fom_file", ff[[f]])) {
                     mstr <- ff[[f]]
                     mparts <- strsplit(mstr, ";")[[1]]
-                    csvlist <- c(csvlist, list(data.table(plate_id = pid, idx = i,
-                      dir = anafolder, fn = f, cols = mparts[2], skip = mparts[3],
+                    csvlist <- c(csvlist, list(data.table(
+#                         plate_id = pid,
+                        idx = i,
+                        dir = anafolder,
+                        fn = f,
+                        cols = mparts[2],
+                        skip = mparts[3],
                       len = mparts[4])))
                   }
                 }
@@ -532,7 +593,8 @@ readanalst <- function(ts, exper = "eche") {
     for (x in csvlist) {
         if (file.exists(file.path(x$dir, x$fn))) {
             fomdt <- fread(file.path(x$dir, x$fn), skip = as.numeric(x$skip), nrows = as.numeric(x$len),
-                col.names = strsplit(x$cols, ",")[[1]])[, `:=`(plate_id = as.integer(x$plate_id),
+                col.names = strsplit(x$cols, ",")[[1]])[, `:=`(
+#                 plate_id = as.integer(x$plate_id),
                 ana = ts, idx = x$idx)]
             setkey(fomdt, sample_no)
             fomlist[[x$idx]] <- fomdt
@@ -639,6 +701,20 @@ parsepos <- function(s) {
     return(c(xmin, xmax, ymin, ymax))
 }
 
+readzipped_eche <- function(zpath, fn){
+    filecon <- unz(zpath, filename = fn)
+    filezcon <- gzcon(filecon)
+    stxt <- readLines(filezcon)
+    close(filezcon)
+    
+    cline<-grep('%column_headings=', stxt)
+    col_names<-strsplit(sub('%column_headings=', '', stxt[cline]), '\t')[[1]]
+    sdt<-as.data.table(t(as.data.table(lapply(stxt[cline+1:length(stxt)], function(x) strsplit(x, '\t')[[1]]))))
+    names(sdt)<-sub('\\(', '.', sub(')', '', col_names))
+                                          
+    return(sdt)
+}
+                                      
 readnest <- function(fpath, ext, unzip = F) {
     if (unzip) {
         fn <- strsplit(fpath, ".", fixed = T)[[1]]
@@ -839,8 +915,8 @@ getcompdt <- function(infodt, alloys = T) {
             fixed = T)[[1]])
         loaddt <- data.table(cels, concs)
         if (length(cels) >= length(els)) {
-            compdt <- data.table(compstr = trimws(strsplit(gsub("([A-Z])", " \\1",
-                els), ",")), channels = channellist)
+            compdt <- data.table(compstr = trimws(strsplit(gsub("([A-Z])", " \\1", els), ",")))
+            compdt[,channels := channellist[1:length(compdt$compstr)]]
             scompdt <- splitcol2rows_mget(compdt, "compstr", " ")
             lscompdt <- cbind(scompdt, loaddt)
             setkey(lscompdt, channels)
@@ -866,6 +942,14 @@ getcompdt <- function(infodt, alloys = T) {
         concdt[, `:=`(alloy_frac, round(alloy_frac, 3))]
     }
     return(concdt)
+}
+                      
+gencomplabs <- function(compdt, pm, digits=1, appendstr="*O[x]") {
+    labdt <- copy(compdt)
+    els <-  Filter(function(x) x!='Sample', names(labdt))
+    labdt[,(els) := round(.SD/Reduce(`+`, .SD), digits), .SDcols=els]
+    labdt[, strlab := sapply(1:nrow(labdt), function(i) paste0(paste0(paste0(els, paste0('[', transpose(labdt[i][,2:(length(els)+1),with=F])$V1, ']'))[transpose(labdt[i][,2:(length(els)+1),with=F])$V1>0], collapse='*'), appendstr, collapse=''))]
+    return(labdt)
 }
 
 getalloys <- function(infometa) {
@@ -940,4 +1024,23 @@ getallfiles <- function(anats) {
     ana <- getanafiles(anameta)
     exp <- getexpfiles(readrcp(findexp(anameta$experiment_name)))
     return(list(ana = ana, exp = exp))
+}
+rcp_to_lines <- function(rcplist) {
+    makelines <- function(sublist, level = 0) {
+        sublines <- character()
+        for (key in names(sublist)) {
+            if (is.null(names(sublist[[key]]))) {
+                sublines <- c(sublines, paste0(paste(rep(" ", level * 4), collapse = ""), key, ": ", sublist[[key]]))
+            } else {
+                sublines <- c(sublines, paste0(paste(rep(" ", level * 4), collapse = ""), key, ":"), makelines(sublist[[key]], level + 1))
+            }
+        }
+        return(sublines)
+    }
+    lines <- makelines(rcplist)
+    return(lines)
+}
+writercp <- function(rcpmeta, path) {
+    lines <- rcp_to_lines(rcpmeta)
+    cat(paste(lines, collapse = "\n"), file = path)
 }

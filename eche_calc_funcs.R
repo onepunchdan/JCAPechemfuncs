@@ -268,6 +268,21 @@ conv.xrf <- function(DT.int, calib = "48-800-2000-vacu-3.2__20180726-v1-medTa.cs
     }
     return(DT.new)
 }
+                                                        
+calib.xrf <- function (DT.int, calib = "48-800-2000-vacu-3.2__20200123-v1-medTa.csv") 
+{
+    transitions <- grep('CPS', names(DT.int), value=T)
+    caldt <- fread(file.path(kd, "experiments", "xrfs", "user", 
+        "calibration_libraries", calib))
+    DT.new <- copy(DT.int)
+    for (t in transitions) {
+        calind <- match(sub("\\.CPS", "", t), caldt$transition)
+        ellab <- paste0(strtrim(t, nchar(t) - 4), ".nmol")
+        nmols <- caldt[calind]$nmol.CPS * DT.new[, t, with = F]
+        DT.new[, `:=`(eval(ellab), eval(nmols))]
+    }
+    return(DT.new)
+}
 
 smoothxrf <- function(intdt, nx, ny) {
     intnames <- names(intdt)[!names(intdt) %in% c("BatchLabel", "StgLabel", "StagX",
