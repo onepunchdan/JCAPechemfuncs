@@ -1,6 +1,18 @@
 library(lubridate)
 library(data.table)
 library(stringr)
+library(parallel)
+
+mcsapply <- function (X, FUN, ..., simplify = TRUE, USE.NAMES = TRUE) {
+  FUN <- match.fun(FUN)
+  answer <- parallel::mclapply(X = X, FUN = FUN, ...)
+  if (USE.NAMES && is.character(X) && is.null(names(answer))) 
+    names(answer) <- X
+  if (!isFALSE(simplify) && length(answer)) 
+    simplify2array(answer, higher = (simplify == "array"))
+  else answer
+}
+
 readeche <- function(path) {
     dt <- fread(path, header = T, skip = 14)
     f <- basename(path)
@@ -306,7 +318,7 @@ readrawfromexp <- function(expdt) {
     readzipped <- function(run) {
         rundt <- expdt[run_idx == run]
         run_path <- rundt[1]$run_path
-        unztemp <- tempdir()
+        unztemp <- tempfile(pattern="dir")
         unztemp <- gsub("\\\\", "/", unztemp)
         unzip(run_path, files = rundt$filename, exdir = unztemp, overwrite = T, junkpaths = T)
         newdt <- rbindlist(apply(rundt, 1, function(x) fread(file.path(unztemp, x["filename"]),
@@ -315,7 +327,7 @@ readrawfromexp <- function(expdt) {
             filename = trimws(x["filename"]), type = trimws(x["type"]))]))
         names(newdt) <- sub("\\)", "", names(newdt))
         names(newdt) <- sub("\\(", ".", names(newdt))
-        do.call(file.remove, list(list.files(unztemp, full.names = TRUE)))
+        unlink(unztemp, recursive=T)
         return(newdt)
     }
     finaldt <- rbindlist(lapply(runs, function(x) readzipped(x)[, `:=`(run_index,
@@ -323,8 +335,22 @@ readrawfromexp <- function(expdt) {
     return(finaldt[order(technum, Sample)])
 }
                                 
+readzippedfom <- function(zippath, csvname, skip=0, colnames=NA) {
+    unztemp <- tempfile(pattern="dir")
+    unztemp <- gsub("\\\\", "/", unztemp)
+    unzip(zippath, files = csvname, exdir = unztemp, overwrite = T, junkpaths = T)
+    if(!is.na(colnames)){
+        rdt <- fread(file.path(unztemp, csvname), skip = skip, header = F, colClasses = rep("numeric",
+          length(colnames)), col.names = colnames)
+    }
+    names(rdt) <- sub("\\)", "", names(rdt))
+    names(rdt) <- sub("\\(", ".", names(rdt))
+    unlink(unztemp, recursive=T)
+    return(rdt)
+}
+                                
 readecherunfiles <- function(rundt) {
-    unztemp <- tempdir()
+    unztemp <- tempfile(pattern="dir")
     unztemp <- gsub("\\\\", "/", unztemp)
     runlist <- list()
     for (i in 1:dim(rundt)[1]) {
@@ -339,7 +365,7 @@ readecherunfiles <- function(rundt) {
     newdt <- rbindlist(runlist)
     names(newdt) <- sub("\\)", "", names(newdt))
     names(newdt) <- sub("\\(", ".", names(newdt))
-    do.call(file.remove, list(list.files(unztemp, full.names = TRUE)))
+    unlink(unztemp, recursive=T)
     return(newdt[order(technum, Sample, t.s)])
 }
 
@@ -348,7 +374,7 @@ readexpfiles <- function(expdt) {
     readzipped <- function(run) {
         rundt <- expdt[run_idx == run]
         run_path <- rundt[1]$run_path
-        unztemp <- tempdir()
+        unztemp <- tempfile(pattern="dir")
         unztemp <- gsub("\\\\", "/", unztemp)
         unzip(run_path, files = rundt$filename, exdir = unztemp, overwrite = T, junkpaths = T)
         runlist <- list()
@@ -361,15 +387,16 @@ readexpfiles <- function(expdt) {
                 filename = trimws(rundt[i]$filename), type = trimws(rundt[i]$type))]
             runlist <- c(runlist, list(rdt))
         }
-        newdt <- rbindlist(runlist)
+        newdt <- rbindlist(runlist, fill=T)
         names(newdt) <- sub("\\)", "", names(newdt))
         names(newdt) <- sub("\\(", ".", names(newdt))
-        do.call(file.remove, list(list.files(unztemp, full.names = TRUE)))
+        names(newdt) <- sub(" \\.", "", names(newdt))
+        unlink(unztemp, recursive=T)
         return(newdt)
     }
     finaldt <- rbindlist(lapply(runs, function(x) readzipped(x)[, `:=`(run_index,
         x)]))
-    return(finaldt[order(technum, Sample, t.s)])
+    return(finaldt[order(technum, Sample)])
 }
 
 getanafiles <- function(meta, type = "inter_files") {
@@ -403,7 +430,7 @@ getanafiles <- function(meta, type = "inter_files") {
 
 readanafiles <- function(anadt) {
     ana_path <- anadt[1]$ana_path
-    unztemp <- tempdir()
+    unztemp <- tempfile(pattern="dir")
     unztemp <- gsub("\\\\", "/", unztemp)
     unzip(ana_path, files = anadt$filename, exdir = unztemp, overwrite = T, junkpaths = T)
     newdt <- rbindlist(apply(anadt, 1, function(x) fread(file.path(unztemp, x["filename"]),
@@ -412,7 +439,7 @@ readanafiles <- function(anadt) {
             tech = trimws(x["tech"]), filename = trimws(x["filename"]))]))
     names(newdt) <- sub("\\)", "", names(newdt))
     names(newdt) <- sub("\\(", ".", names(newdt))
-    do.call(file.remove, list(list.files(unztemp, full.names = TRUE)))
+    unlink(unztemp, recursive=T)
     return(newdt[order(technum, Sample)])
 }
 
@@ -421,7 +448,7 @@ readoptfiles <- function(expdt) {
     readzipped <- function(run) {
         rundt <- expdt[run_idx == run]
         run_path <- rundt[1]$run_path
-        unztemp <- tempdir()
+        unztemp <- tempfile(pattern="dir")
         unztemp <- gsub("\\\\", "/", unztemp)
         unzip(run_path, exdir = unztemp, overwrite = T, junkpaths = T)
         if ("measure_time" %in% names(rundt)) {
@@ -434,7 +461,7 @@ readoptfiles <- function(expdt) {
         }
         names(newdt) <- sub("\\)", "", names(newdt))
         names(newdt) <- sub("\\(", ".", names(newdt))
-        do.call(file.remove, list(list.files(unztemp, full.names = TRUE)))
+        unlink(unztemp, recursive=T)
         return(newdt)
     }
     finaldt <- as.data.table(rbindlist(lapply(runs, function(x) readzipped(x)[, `:=`(run_index,
