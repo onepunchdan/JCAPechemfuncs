@@ -390,7 +390,7 @@ readexpfiles <- function(expdt) {
         newdt <- rbindlist(runlist, fill=T)
         names(newdt) <- sub("\\)", "", names(newdt))
         names(newdt) <- sub("\\(", ".", names(newdt))
-        names(newdt) <- sub(" \\.", "", names(newdt))
+        names(newdt) <- sub(" \\.", ".", names(newdt))
         unlink(unztemp, recursive=T)
         return(newdt)
     }
